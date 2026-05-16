@@ -52,7 +52,7 @@ Cada archivo especifica tareas técnicas auto-contenidas:
 
 ```bash
 # Clonar
-git clone https://github.com/<usuario>/tp-integrador-ia.git
+git clone https://github.com/CoffeeBreak03/tp-integrador-ia.git
 cd tp-integrador-ia
 
 # Setup
