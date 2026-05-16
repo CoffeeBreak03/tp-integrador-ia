@@ -1,0 +1,17 @@
+{
+  "status": "success",
+  "translations": [
+    {
+      "original": "おはようございます",
+      "translated": "Buenos días"
+    },
+    {
+      "original": "今日はいい天気ですね",
+      "translated": "Hace muy buen día hoy"
+    },
+    {
+      "original": "本当にそうだね",
+      "translated": "Definitivamente"
+    }
+  ]
+}

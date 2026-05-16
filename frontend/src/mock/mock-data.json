@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "box": [50, 100, 200, 500],
+    "texto_original": "おはようございます",
+    "texto_traducido": "Buenos días"
+  },
+  {
+    "id": 2,
+    "box": [250, 120, 380, 480],
+    "texto_original": "今日はいい天気ですね",
+    "texto_traducido": "Hace muy buen día hoy"
+  },
+  {
+    "id": 3,
+    "box": [420, 110, 550, 490],
+    "texto_original": "本当にそうだね",
+    "texto_traducido": "Definitivamente"
+  }
+]
