@@ -11,7 +11,7 @@ System Prompt: SUB_AGENTE_DOCS
   - Qué componente o función se completó.
   - Cómo intervino la IA (refactorización, generación, optimización, corrección).
   - Qué punto de `2_FRONTEND_MOCK_DRIVEN.md` se cumplió.
-- El resultado debe ser un backlog de trazabilidad corto y técnico.
+- El resultado debe ser un backlog de trazabilidad corto y técnico almacenado como FRONTEND_PROGRESS.md en el directorio raíz.
 - Mantener el formato listo para integrarse en la documentación del proyecto.
 - Priorizar claridad en la relación cambio → impacto → punto cumplido.
 - No incluir explicaciones largas ni detalles fuera de contexto técnico.
