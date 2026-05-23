@@ -1,42 +1,42 @@
 <template>
-  <div class="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-950/80 dark:shadow-none">
-    <label class="mb-3 block text-sm font-semibold text-slate-700 dark:text-slate-200">Carga de imagen o PDF</label>
-    <div class="flex flex-col gap-3">
-      <input
-        ref="fileInput"
-        type="file"
-        accept="image/*,application/pdf"
-        @change="handleFileUpload"
-        class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
-      />
-
-      <div class="space-y-2 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-        <p class="font-medium text-slate-800 dark:text-slate-100">Estado</p>
-        <p>{{ statusMessage }}</p>
-        <p class="text-xs text-slate-500 dark:text-slate-400">Solo se procesa la primera página de PDF y las imágenes se renderizan como base64 en canvas.</p>
+  <div class="relative">
+    <div v-if="!imageData" class="relative min-h-[320px] overflow-hidden rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-950/80">
+        <div class="mx-auto flex max-w-xs flex-col items-center justify-center gap-4">
+          <button
+            type="button"
+            @click="openExplorer"
+            class="flex h-20 w-20 items-center justify-center rounded-full border border-slate-300 bg-white text-4xl font-bold text-slate-700 shadow transition hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
+            aria-label="Agregar imagen"
+          >
+            +
+          </button>
+          <div>
+            <p class="text-lg font-semibold text-slate-900 dark:text-slate-100">Carga tu imagen o PDF</p>
+            <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Selecciona un archivo desde el explorador.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div v-if="errorMessage" class="rounded-2xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
-        <p class="font-semibold">Error</p>
-        <p>{{ errorMessage }}</p>
-      </div>
-    </div>
+    <input
+      ref="fileInput"
+      type="file"
+      accept="image/*,application/pdf"
+      class="hidden"
+      @change="handleFileUpload"
+    />
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref } from 'vue';
 
-type FileType = 'image' | 'pdf' | 'empty';
-
-const fileInput = ref<HTMLInputElement | null>(null);
-const errorMessage = ref('');
-const statusMessage = ref('Selecciona un archivo JPG, PNG o PDF para comenzar.');
-const currentFileType = ref<FileType>('empty');
-
+const props = defineProps<{ imageData: string }>();
 const emit = defineEmits<{
   (e: 'update:imageData', value: string): void;
 }>();
+
+const fileInput = ref<HTMLInputElement | null>(null);
 
 const buildImageDataUrl = async (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -84,33 +84,32 @@ const handlePdfFile = async (file: File): Promise<string> => {
   return canvas.toDataURL('image/png');
 };
 
+const openExplorer = () => {
+  if (!fileInput.value) return;
+  fileInput.value.value = '';
+  fileInput.value.click();
+};
+
 const handleFileUpload = async (event: Event) => {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
-  if (!file) {
-    return;
-  }
-
-  errorMessage.value = '';
-  statusMessage.value = 'Procesando archivo...';
+  if (!file) return;
 
   try {
+    let imageData = '';
     if (file.type.startsWith('image/')) {
-      currentFileType.value = 'image';
-      const imageData = await buildImageDataUrl(file);
-      emit('update:imageData', imageData);
-      statusMessage.value = 'Imagen cargada correctamente. Puedes ver el overlay de traducción.';
+      imageData = await buildImageDataUrl(file);
     } else if (file.type === 'application/pdf') {
-      currentFileType.value = 'pdf';
-      const imageData = await handlePdfFile(file);
-      emit('update:imageData', imageData);
-      statusMessage.value = 'PDF convertido a canvas y cargado. Primera página visible.';
+      imageData = await handlePdfFile(file);
     } else {
       throw new Error('Formato no compatible. Usa JPG, PNG o PDF.');
     }
+
+    emit('update:imageData', imageData);
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Error inesperado.';
-    statusMessage.value = 'No se pudo cargar el archivo.';
+    console.warn(error);
   }
 };
+
+defineExpose({ openExplorer });
 </script>

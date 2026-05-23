@@ -6,6 +6,11 @@
 - Completed `src/lib/scale.ts` utilities for normalized pixel conversion and `src/lib/contract.ts` validation aligned with the JSON contract.
 - Added unit tests for scale conversion and contract validation in `src/__tests__`.
 - Verified with `npm test` and `npm run build` in `frontend`.
+- Added global overlay visibility toggle and a slide-in translation panel to keep the image centered until the list is requested.
+- Embedded image upload inside the main image block with a circular + button and contextual picker menu.
+- Implemented clipboard image paste, local recent uploads, and file explorer selection desde un único popup.
+- Added support for a secondary "Agregar otra imagen" action debajo de la imagen cargada.
+ - Both the `+` button and the "Agregar otra imagen" button now open the native file explorer directly (simplified UX).
 
 ## 2_FRONTEND_MOCK_DRIVEN.md coverage
 - T2.1: Frontend setup, alias `@/`, Tailwind, PWA metadata.
@@ -15,3 +20,5 @@
 - T2.5: Scale contract utilities and validation.
 - T2.7: Mock data consumption from local JSON.
 - T2.8: Vitest unit tests for critical utilities.
+- T2.9: UI behavior with collapsible overlays and slide panel presentation.
+- T2.10: In-block upload prompt with clipboard/recent/explorer picker and add-another fallback.

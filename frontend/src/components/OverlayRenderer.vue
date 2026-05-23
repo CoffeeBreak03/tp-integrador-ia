@@ -13,19 +13,21 @@
           class="h-full w-full object-contain"
         />
 
-        <div
-          v-for="item in translations"
-          :key="item.id"
-          :style="styleFromBox(item.box)"
-          class="absolute rounded-xl border-2 bg-white/80 p-2 text-[11px] leading-tight shadow-md backdrop-blur dark:bg-slate-950/80"
-          :class="{
-            'border-blue-500 ring-2 ring-blue-400/40': item.id === selectedItemId,
-            'border-transparent': item.id !== selectedItemId,
-          }"
-        >
-          <p class="font-semibold text-slate-900 dark:text-slate-100">{{ item.texto_traducido }}</p>
-          <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">{{ item.texto_original }}</p>
-        </div>
+        <template v-if="showOverlay">
+          <div
+            v-for="item in translations"
+            :key="item.id"
+            :style="styleFromBox(item.box)"
+            class="absolute rounded-xl border-2 bg-white/80 p-2 text-[11px] leading-tight shadow-md backdrop-blur dark:bg-slate-950/80"
+            :class="{
+              'border-blue-500 ring-2 ring-blue-400/40': item.id === selectedItemId,
+              'border-transparent': item.id !== selectedItemId,
+            }"
+          >
+            <p class="font-semibold text-slate-900 dark:text-slate-100">{{ item.texto_traducido }}</p>
+            <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">{{ item.texto_original }}</p>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -39,6 +41,7 @@ const props = defineProps<{
   imageData: string;
   translations: TranslationContract[];
   selectedItemId?: number;
+  showOverlay: boolean;
 }>();
 
 const imageAspectRatio = ref(16 / 9);
