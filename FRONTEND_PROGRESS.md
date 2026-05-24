@@ -12,6 +12,8 @@
 - Added support for a secondary "Agregar otra imagen" action debajo de la imagen cargada.
  - Both the `+` button and the "Agregar otra imagen" button now open the native file explorer directly (simplified UX).
 
+- Implemented dynamic scaling: when the translations panel opens the center image and overlay boxes scale smoothly from the bottom-right to fit alongside the list (JS-driven measurement + CSS transform). Satisfies T2.9.
+
 ## 2_FRONTEND_MOCK_DRIVEN.md coverage
 - T2.1: Frontend setup, alias `@/`, Tailwind, PWA metadata.
 - T2.2: ImageUploader component with image+PDF handling.

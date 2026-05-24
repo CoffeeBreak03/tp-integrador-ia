@@ -44,10 +44,11 @@
             <div class="relative mt-4 overflow-hidden rounded-3xl bg-slate-100 p-4 dark:bg-slate-950">
               <div class="relative mx-auto flex max-w-6xl justify-center">
                 <div
+                  ref="centerContainer"
                   class="w-full max-w-4xl transition-transform duration-300"
-                  :class="showTranslations ? '-translate-x-80' : 'translate-x-0'"
+                  :style="centerStyle"
                 >
-                  <div class="relative">
+                  <div class="relative" style="transform-origin: right bottom;">
                     <ImageUploader
                       ref="imageUploader"
                       :imageData="imageData"
@@ -75,7 +76,8 @@
                 </div>
 
                 <aside
-                  class="pointer-events-none absolute right-0 top-0 h-full w-80 transition-transform duration-300"
+                  ref="asidePanel"
+                  class="pointer-events-none absolute right-0 top-0 h-full w-80 overflow-auto transition-transform duration-300"
                   :class="showTranslations ? 'pointer-events-auto translate-x-0' : 'translate-x-full'"
                 >
                   <TranslationPanel v-if="translations.length" :translations="translations" @selectItem="highlightItem" />
@@ -90,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed, watch, nextTick, onUnmounted } from 'vue';
 import ImageUploader from '@/components/ImageUploader.vue';
 import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
@@ -102,6 +104,50 @@ const translations = ref<TranslationContract[]>([]);
 const selectedItemId = ref<number | undefined>(undefined);
 const showOverlay = ref(true);
 const showTranslations = ref(false);
+
+const centerContainer = ref<HTMLElement | null>(null);
+const asidePanel = ref<HTMLElement | null>(null);
+const scale = ref(1);
+
+const centerStyle = computed(() => ({
+  transform: `scale(${scale.value})`,
+  transformOrigin: 'right bottom',
+  transition: 'transform 300ms ease'
+}));
+
+const recalcScale = () => {
+  const center = centerContainer.value;
+  const aside = asidePanel.value;
+  if (!center) return;
+
+  const parent = center.parentElement ?? center;
+  const parentWidth = parent.getBoundingClientRect().width;
+  const centerRect = center.getBoundingClientRect();
+  const asideWidth = aside ? aside.getBoundingClientRect().width : 0;
+  const available = parentWidth - (showTranslations.value ? asideWidth : 0);
+  let s = available / centerRect.width;
+  if (!isFinite(s) || s <= 0) s = 1;
+  if (s > 1) s = 1;
+  if (s < 0.5) s = 0.5;
+  scale.value = s;
+};
+
+watch(showTranslations, async () => {
+  await nextTick();
+  recalcScale();
+});
+
+watch(imageData, async () => {
+  await nextTick();
+  recalcScale();
+});
+
+onMounted(() => {
+  recalcScale();
+  window.addEventListener('resize', recalcScale);
+});
+
+onUnmounted(() => window.removeEventListener('resize', recalcScale));
 
 const highlightItem = (item: TranslationContract) => {
   selectedItemId.value = item.id;
