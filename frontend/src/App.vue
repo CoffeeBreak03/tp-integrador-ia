@@ -35,6 +35,13 @@
                 >
                   {{ showTranslations ? 'Ocultar lista' : 'Mostrar lista' }}
                 </button>
+                <button
+                  type="button"
+                  @click="isFitToScreen = !isFitToScreen"
+                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
+                >
+                  {{ isFitToScreen ? 'Restaurar tamaño' : 'Ajustar tamaño' }}
+                </button>
               </div>
               <p class="text-sm text-slate-600 dark:text-slate-400">
                 Imagen céntrica con overlay opcional. El panel derecho se desliza para mostrar las traducciones.
@@ -61,6 +68,7 @@
                       :translations="translations"
                       :selectedItemId="selectedItemId"
                       :showOverlay="showOverlay"
+                      :fitToScreen="isFitToScreen"
                     />
                   </div>
 
@@ -104,6 +112,7 @@ const translations = ref<TranslationContract[]>([]);
 const selectedItemId = ref<number | undefined>(undefined);
 const showOverlay = ref(true);
 const showTranslations = ref(false);
+const isFitToScreen = ref(false);
 
 const centerContainer = ref<HTMLElement | null>(null);
 const asidePanel = ref<HTMLElement | null>(null);

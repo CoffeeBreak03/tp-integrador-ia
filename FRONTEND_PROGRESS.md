@@ -12,7 +12,9 @@
 - Added support for a secondary "Agregar otra imagen" action debajo de la imagen cargada.
  - Both the `+` button and the "Agregar otra imagen" button now open the native file explorer directly (simplified UX).
 
-- Implemented dynamic scaling: when the translations panel opens the center image and overlay boxes scale smoothly from the bottom-right to fit alongside the list (JS-driven measurement + CSS transform). Satisfies T2.9.
+- Implemented view-height resizing: added `Ajustar tamaño` / `Restaurar tamaño` button in the main toolbar to shrink the manga image to fit the browser height (via `max-h-[calc(100vh-180px)]` and `h-full w-auto object-contain mx-auto`) while preserving exact overlay alignment. Improves desktop reading without scrolling, keeping the translation list intact.
+- Corrected fit-to-screen rendering so the image and overlay boxes scale together as a smaller page instead of clipping any content.
+- Refined the image container measurement so the manga page stays centered and overlay coordinates remain aligned when `Ajustar tamaño` is active.
 
 ## 2_FRONTEND_MOCK_DRIVEN.md coverage
 - T2.1: Frontend setup, alias `@/`, Tailwind, PWA metadata.
