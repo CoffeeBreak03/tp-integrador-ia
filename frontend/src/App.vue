@@ -117,25 +117,18 @@ const centerStyle = computed(() => ({
 
 const recalcScale = () => {
   const center = centerContainer.value;
-  const aside = asidePanel.value;
   if (!center) return;
 
   const parent = center.parentElement ?? center;
   const parentWidth = parent.getBoundingClientRect().width;
   const centerRect = center.getBoundingClientRect();
-  const asideWidth = aside ? aside.getBoundingClientRect().width : 0;
-  const available = parentWidth - (showTranslations.value ? asideWidth : 0);
+  const available = parentWidth;
   let s = available / centerRect.width;
   if (!isFinite(s) || s <= 0) s = 1;
   if (s > 1) s = 1;
   if (s < 0.5) s = 0.5;
   scale.value = s;
 };
-
-watch(showTranslations, async () => {
-  await nextTick();
-  recalcScale();
-});
 
 watch(imageData, async () => {
   await nextTick();
