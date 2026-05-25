@@ -19,14 +19,31 @@ export interface VisionOutput {
   }>;
 }
 
+const normalizeWhitespace = (text: string): string => {
+  return text.replace(/\s+/g, ' ').trim();
+};
+
 export const denormalizeVisionToContract = (
   visionOutput: VisionOutput,
   translations: Map<string, string>
 ): TranslationBox[] => {
-  return visionOutput.boxes.map((box) => ({
-    id: box.id,
-    box: [box.y_min, box.x_min, box.y_max, box.x_max],
-    texto_original: box.text,
-    texto_traducido: translations.get(box.text) || '',
-  }));
+  return visionOutput.boxes.map((box) => {
+    const normalized = normalizeWhitespace(box.text);
+    let translated = '';
+
+    // Try to find translation with normalized text
+    for (const [key, value] of translations.entries()) {
+      if (normalizeWhitespace(key) === normalized) {
+        translated = value;
+        break;
+      }
+    }
+
+    return {
+      id: box.id,
+      box: [box.y_min, box.x_min, box.y_max, box.x_max],
+      texto_original: box.text,
+      texto_traducido: translated,
+    };
+  });
 };

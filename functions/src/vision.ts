@@ -1,11 +1,38 @@
-// Placeholder para functions/vision.ts
-// Implementar según T3.5 en 3_BACKEND_Y_APIS.md
-// Endpoint: POST /.netlify/functions/vision
+import { Handler } from '@netlify/functions';
+import { getAzureClient } from './lib/azure-client';
 
-export async function handler(event: any) {
-  // TODO: Implementar vision endpoint
-  return {
-    statusCode: 501,
-    body: JSON.stringify({ error: 'Not implemented yet' }),
-  };
+interface VisionRequest {
+  imageBase64: string;
 }
+
+export const handler: Handler = async (event, context) => {
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
+  }
+
+  try {
+    const body = JSON.parse(event.body || '{}') as VisionRequest;
+    if (!body.imageBase64) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Missing imageBase64' }),
+      };
+    }
+
+    const azureClient = getAzureClient();
+    const result = await azureClient.callVisionModel(body.imageBase64);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ vision_output: result }),
+    };
+  } catch (error) {
+    console.error('Vision function error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: String(error) }),
+    };
+  }
+};
