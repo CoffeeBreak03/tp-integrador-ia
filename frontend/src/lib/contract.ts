@@ -1,6 +1,3 @@
-// Placeholder para lib/contract.ts
-// Implementar según T2.5 en 2_FRONTEND_MOCK_DRIVEN.md
-
 export interface TranslationContract {
   id: number;
   box: [number, number, number, number];
@@ -8,13 +5,29 @@ export interface TranslationContract {
   texto_traducido: string;
 }
 
+const isNormalizedBox = (box: unknown): box is [number, number, number, number] => {
+  return (
+    Array.isArray(box) &&
+    box.length === 4 &&
+    box.every(
+      (coord) => typeof coord === 'number' && Number.isInteger(coord) && coord >= 0 && coord <= 1000
+    )
+  );
+};
+
 export const validateContract = (data: unknown): data is TranslationContract[] => {
   if (!Array.isArray(data)) return false;
-  return data.every(item =>
-    typeof item.id === 'number' &&
-    Array.isArray(item.box) &&
-    item.box.length === 4 &&
-    typeof item.texto_original === 'string' &&
-    typeof item.texto_traducido === 'string'
-  );
+
+  return data.every((item) => {
+    return (
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as any).id === 'number' &&
+      isNormalizedBox((item as any).box) &&
+      typeof (item as any).texto_original === 'string' &&
+      (item as any).texto_original.length > 0 &&
+      typeof (item as any).texto_traducido === 'string' &&
+      (item as any).texto_traducido.length > 0
+    );
+  });
 };

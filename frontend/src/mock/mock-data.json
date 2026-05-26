@@ -1,20 +1,20 @@
 [
   {
     "id": 1,
-    "box": [50, 100, 200, 500],
-    "texto_original": "おはようございます",
-    "texto_traducido": "Buenos días"
+    "box": [245, 460, 500, 810],
+    "texto_original": "何それ寝てる間に生えたってこと...?",
+    "texto_traducido": "¿Qué es eso de que te crecieron mientras dormías...?"
   },
   {
     "id": 2,
-    "box": [250, 120, 380, 480],
-    "texto_original": "今日はいい天気ですね",
-    "texto_traducido": "Hace muy buen día hoy"
+    "box": [730, 235, 985, 540],
+    "texto_original": "知らないよ寝てたもん",
+    "texto_traducido": "¡No lo sé, estaba dormida!"
   },
   {
     "id": 3,
-    "box": [420, 110, 550, 490],
-    "texto_original": "本当にそうだね",
-    "texto_traducido": "Definitivamente"
+    "box": [725, 0, 915, 230],
+    "texto_original": "そらそうか",
+    "texto_traducido": "Y sí, tiene sentido."
   }
 ]
