@@ -8,37 +8,52 @@
             <h1 class="text-3xl font-bold sm:text-4xl">Traductor de Manga</h1>
           </div>
           <div class="rounded-3xl bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm dark:bg-slate-900/90 dark:text-slate-300">
-            Frontend mock-driven con datos locales.
+            Frontend integrado con backend .netlify/functions/process
           </div>
         </div>
         <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-          Carga una imagen o PDF, valida el contrato JSON local y visualiza las traducciones con posicionamiento normalizado.
+          Carga una imagen o PDF, envíala al backend para OCR y traducción, luego visualiza las traducciones con posicionamiento normalizado.
         </p>
       </header>
 
       <main class="space-y-5">
         <section class="space-y-4">
           <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/80">
+            <div v-if="errorMessage" class="mb-4 rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300">
+              <p class="font-semibold">Error al procesar la imagen:</p>
+              <p class="mt-1">{{ errorMessage }}</p>
+            </div>
+
+            <div v-if="isLoading" class="mb-4 rounded-2xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <div class="flex items-center gap-2">
+                <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600"></div>
+                <p class="font-semibold">Procesando imagen...</p>
+              </div>
+            </div>
+
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-x-2">
                 <button
                   type="button"
                   @click="showOverlay = !showOverlay"
-                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
+                  :disabled="isLoading"
+                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                 >
                   {{ showOverlay ? 'Ocultar overlays' : 'Mostrar overlays' }}
                 </button>
                 <button
                   type="button"
                   @click="showTranslations = !showTranslations"
-                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
+                  :disabled="isLoading"
+                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                 >
                   {{ showTranslations ? 'Ocultar lista' : 'Mostrar lista' }}
                 </button>
                 <button
                   type="button"
                   @click="isFitToScreen = !isFitToScreen"
-                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
+                  :disabled="isLoading"
+                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                 >
                   {{ isFitToScreen ? 'Restaurar tamaño' : 'Ajustar tamaño' }}
                 </button>
@@ -76,7 +91,8 @@
                     <button
                       type="button"
                       @click="openExplorer"
-                      class="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
+                      :disabled="isLoading"
+                      class="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                     >
                       Agregar otra imagen
                     </button>
@@ -104,7 +120,8 @@ import { onMounted, ref, computed, watch, nextTick, onUnmounted } from 'vue';
 import ImageUploader from '@/components/ImageUploader.vue';
 import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
-import { TranslationContract, validateContract } from '@/lib/contract';
+import { TranslationContract } from '@/lib/contract';
+import { processImage } from '@/lib/api';
 
 const imageUploader = ref<{ openExplorer: () => void } | null>(null);
 const imageData = ref('');
@@ -113,6 +130,8 @@ const selectedItemId = ref<number | undefined>(undefined);
 const showOverlay = ref(true);
 const showTranslations = ref(false);
 const isFitToScreen = ref(false);
+const isLoading = ref(false);
+const errorMessage = ref<string | null>(null);
 
 const centerContainer = ref<HTMLElement | null>(null);
 const asidePanel = ref<HTMLElement | null>(null);
@@ -144,6 +163,37 @@ watch(imageData, async () => {
   recalcScale();
 });
 
+// Procesar imagen cuando se carga
+watch(
+  imageData,
+  async (newImageData) => {
+    if (!newImageData) {
+      translations.value = [];
+      selectedItemId.value = undefined;
+      errorMessage.value = null;
+      return;
+    }
+
+    translations.value = [];
+    selectedItemId.value = undefined;
+    isLoading.value = true;
+    errorMessage.value = null;
+
+    try {
+      const result = await processImage(newImageData);
+      translations.value = result || [];
+    } catch (error) {
+      errorMessage.value = error instanceof Error 
+        ? error.message 
+        : 'Error desconocido al procesar la imagen';
+      translations.value = [];
+    } finally {
+      isLoading.value = false;
+    }
+  },
+  { immediate: false }
+);
+
 onMounted(() => {
   recalcScale();
   window.addEventListener('resize', recalcScale);
@@ -158,18 +208,4 @@ const highlightItem = (item: TranslationContract) => {
 const openExplorer = () => {
   imageUploader.value?.openExplorer();
 };
-
-onMounted(async () => {
-  try {
-    const module = await import('./mock/mock-data.json');
-    const mockData = module.default as unknown;
-    if (validateContract(mockData)) {
-      translations.value = mockData;
-    } else {
-      console.warn('mock-data.json no cumple el contrato de traducción');
-    }
-  } catch (error) {
-    console.warn('No se pudo cargar mock-data.json', error);
-  }
-});
 </script>

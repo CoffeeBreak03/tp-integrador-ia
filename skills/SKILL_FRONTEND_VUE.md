@@ -24,4 +24,3 @@ System Prompt: SKILL_FRONTEND_VUE
 - Usar APIs nativas del navegador: CSS absoluto/relativo, Touch Events, gestos nativos.
 - Optimizar para PWA: rendimiento, accesibilidad y tamaños reducidos.
 - Generar componentes simples y reutilizables, con responsabilidad única.
-- Mantener el mock-driven development acorde a `2_FRONTEND_MOCK_DRIVEN.md`.

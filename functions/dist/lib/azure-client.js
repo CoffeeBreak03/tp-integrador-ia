@@ -36,6 +36,9 @@ class AzureClient {
             return JSON.stringify([]);
         }
         const url = `${this.config.endpoint.replace(/\/responses$/, '')}/chat/completions`;
+        const imageUrl = imageBase64.startsWith('data:')
+            ? imageBase64
+            : `data:image/jpeg;base64,${imageBase64}`;
         const response = await (0, node_fetch_1.default)(url, {
             method: 'POST',
             headers: {
@@ -51,7 +54,7 @@ class AzureClient {
                             {
                                 type: 'image_url',
                                 image_url: {
-                                    url: `data:image/jpeg;base64,${imageBase64}`,
+                                    url: imageUrl,
                                 },
                             },
                             {
