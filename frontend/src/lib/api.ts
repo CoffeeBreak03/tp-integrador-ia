@@ -18,6 +18,10 @@ export interface ProcessImageResponse {
  */
 export async function processImage(imageBase64: string): Promise<TranslationContract[] | null> {
   try {
+    const controller = new AbortController();
+    // 120 second timeout for HF Space cold start
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
     const response = await fetch('/.netlify/functions/process', {
       method: 'POST',
       headers: {
@@ -26,7 +30,10 @@ export async function processImage(imageBase64: string): Promise<TranslationCont
       body: JSON.stringify({
         imageBase64,
       } as ProcessImageRequest),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorData = (await response.json()) as ProcessImageResponse;

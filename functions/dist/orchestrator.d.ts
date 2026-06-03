@@ -5,9 +5,6 @@ export declare class PipelineOrchestrator {
     constructor(azureClient: AzureClient);
     processMangaImage(imageBase64: string): Promise<TranslationBox[]>;
     private parseVisionOutput;
-    private parseBoxArray;
-    private parseTranslations;
-    private normalizeVisionOutput;
-    private getImageSizeFromBase64;
+    private parseOcrAndTranslation;
 }
 //# sourceMappingURL=orchestrator.d.ts.map

@@ -23,9 +23,10 @@ export const handler: Handler = async (event, context) => {
     }
 
     const azureClient = getAzureClient();
-    const result = await azureClient.callVisionModel(body.imageBase64);
+    const result = await azureClient.detectTextBubbles(body.imageBase64);
     return {
       statusCode: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ vision_output: result }),
     };
   } catch (error) {

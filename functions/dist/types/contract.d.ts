@@ -11,8 +11,12 @@ export interface VisionOutput {
         x_min: number;
         y_max: number;
         x_max: number;
-        text: string;
     }>;
 }
-export declare const denormalizeVisionToContract: (visionOutput: VisionOutput, translations: Map<string, string>) => TranslationBox[];
+export interface GptTranslation {
+    id: number;
+    texto_japones: string;
+    traduccion_espanol: string;
+}
+export declare const mergeVisionAndTranslation: (visionOutput: VisionOutput, translations: GptTranslation[]) => TranslationBox[];
 //# sourceMappingURL=contract.d.ts.map

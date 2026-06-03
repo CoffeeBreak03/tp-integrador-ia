@@ -1,74 +1,114 @@
 import { AzureClient } from './lib/azure-client';
-import { TranslationBox, VisionOutput, denormalizeVisionToContract } from './types/contract';
+import { cropBubbles } from './lib/image-cropper';
+import { TranslationBox, VisionOutput, GptTranslation, mergeVisionAndTranslation } from './types/contract';
 
 export class PipelineOrchestrator {
   constructor(private azureClient: AzureClient) { }
 
   async processMangaImage(imageBase64: string): Promise<TranslationBox[]> {
-    const visionRaw = await this.azureClient.callVisionModel(imageBase64);
-    const visionOutput = this.parseVisionOutput(visionRaw);
+    const startTime = Date.now();
+    console.log('[ORCHESTRATOR] Starting processMangaImage, input size:', imageBase64.length, 'bytes');
+    
+    try {
+      // --- Paso A: Detección espacial con Hugging Face (YOLOv8) ---
+      console.log('[ORCHESTRATOR] Step 1: Calling HF space for spatial detection...');
+      const visionRaw = await this.azureClient.detectTextBubbles(imageBase64);
+      console.log('[ORCHESTRATOR] Spatial detection raw response:', visionRaw.length, 'bytes');
+      
+      if (!visionRaw || visionRaw === '[]') {
+        console.error('[ORCHESTRATOR] ERROR: HF returned empty response');
+        return [];
+      }
+      
+      console.log('[ORCHESTRATOR] Step 2: Parsing spatial output...');
+      const visionOutput = this.parseVisionOutput(visionRaw);
+      console.log('[ORCHESTRATOR] Spatial output parsed:', visionOutput.boxes.length, 'boxes');
+      
+      if (visionOutput.boxes.length === 0) {
+        console.error('[ORCHESTRATOR] ERROR: No boxes extracted from spatial detection');
+        return [];
+      }
 
-    // Collect all texts and send together for context
-    // Collect all texts and send together for context
-    const textsToTranslate = visionOutput.boxes
-      .filter(box => box.text && box.text.trim())
-      .map(box => box.text);
+      // --- Paso B: Croppear cada globo usando las coordenadas ---
+      console.log('[ORCHESTRATOR] Step 3: Cropping individual bubbles...');
+      const croppedBubbles = await cropBubbles(imageBase64, visionOutput.boxes);
+      console.log('[ORCHESTRATOR] Cropped', croppedBubbles.length, 'bubbles');
 
-    const translatedRaw = await this.azureClient.callTranslateModel(textsToTranslate);
-    const translations = this.parseTranslations(translatedRaw, textsToTranslate);
+      if (croppedBubbles.length === 0) {
+        console.error('[ORCHESTRATOR] ERROR: No bubbles could be cropped');
+        return [];
+      }
 
-    return denormalizeVisionToContract(visionOutput, translations);
+      // --- Paso C: OCR y Traducción con Azure GPT-4o ---
+      console.log('[ORCHESTRATOR] Step 4: Calling GPT-4o for OCR and translation...');
+      const translatedRaw = await this.azureClient.callOcrAndTranslation(croppedBubbles);
+      console.log('[ORCHESTRATOR] OCR/Translate raw response length:', translatedRaw.length, 'bytes');
+      
+      if (!translatedRaw) {
+        console.error('[ORCHESTRATOR] ERROR: Translation returned empty response');
+        return [];
+      }
+      
+      console.log('[ORCHESTRATOR] Step 5: Parsing GPT-4o output...');
+      const translations = this.parseOcrAndTranslation(translatedRaw);
+      console.log('[ORCHESTRATOR] GPT-4o output parsed:', translations.length, 'items');
+      
+      if (translations.length === 0) {
+        console.error('[ORCHESTRATOR] ERROR: No translations parsed from GPT-4o response');
+      }
+
+      // --- Paso D: Fusionar coordenadas + textos en la respuesta final ---
+      console.log('[ORCHESTRATOR] Step 6: Merging results to contract...');
+      const result = mergeVisionAndTranslation(visionOutput, translations);
+      console.log('[ORCHESTRATOR] Final result:', result.length, 'items');
+      
+      const totalTime = Date.now() - startTime;
+      console.log('[ORCHESTRATOR] Complete in', totalTime, 'ms');
+      return result;
+    } catch (error) {
+      const totalTime = Date.now() - startTime;
+      console.error('[ORCHESTRATOR] FATAL ERROR after', totalTime, 'ms:', error instanceof Error ? error.message : error);
+      throw error;
+    }
   }
 
-  private parseVisionOutput(raw: string): VisionOutput {
+  private parseVisionOutput(raw: unknown): VisionOutput {
     try {
-      // Remove markdown code blocks if present
-      let json = raw;
-      if (raw.includes('```')) {
-        const start = raw.indexOf('```');
-        const end = raw.lastIndexOf('```');
-        if (start !== end && end > start) {
-          json = raw.substring(start + 3, end).trim();
-          // Remove optional "json" language identifier
-          if (json.startsWith('json')) {
-            json = json.substring(4).trim();
+      let parsed: any = raw;
+
+      if (typeof raw === 'string') {
+        let json = raw;
+        if (raw.includes('```')) {
+          const start = raw.indexOf('```');
+          const end = raw.lastIndexOf('```');
+          if (start !== end && end > start) {
+            json = raw.substring(start + 3, end).trim();
+            if (json.startsWith('json')) {
+              json = json.substring(4).trim();
+            }
           }
         }
+        parsed = JSON.parse(json);
       }
 
-      const parsed = JSON.parse(json);
-      if (!Array.isArray(parsed)) {
-        throw new Error('Vision output is not an array');
-      }
+      const globos: any[] = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.globos)
+          ? parsed.globos
+          : [];
 
       return {
-        boxes: parsed.map((box: any, idx: number) => {
-          // Handle different coordinate formats from Azure
-          let y_min = 0, x_min = 0, y_max = 0, x_max = 0;
-
-          if (box.y_min !== undefined && box.x_min !== undefined && box.y_max !== undefined && box.x_max !== undefined) {
-            y_min = Number(box.y_min) || 0;
-            x_min = Number(box.x_min) || 0;
-            y_max = Number(box.y_max) || 0;
-            x_max = Number(box.x_max) || 0;
-          } else if (box.box && Array.isArray(box.box) && box.box.length === 4) {
-            // Alternative format: box: [y_min, x_min, y_max, x_max]
-            [y_min, x_min, y_max, x_max] = box.box.map((v: any) => Number(v) || 0);
-          } else if (box.coordinates) {
-            // Alternative format: coordinates object
-            y_min = Number(box.coordinates.top) || 0;
-            x_min = Number(box.coordinates.left) || 0;
-            y_max = Number(box.coordinates.bottom) || 0;
-            x_max = Number(box.coordinates.right) || 0;
-          }
+        boxes: globos.map((box: any, idx: number) => {
+          const [y_min, x_min, y_max, x_max] = Array.isArray(box.box) && box.box.length === 4
+            ? box.box.map((value: any) => Number(value) || 0)
+            : [0, 0, 0, 0];
 
           return {
-            id: idx + 1,
+            id: Number(box.id) || idx + 1,
             y_min: Math.min(Math.max(y_min, 0), 1000),
             x_min: Math.min(Math.max(x_min, 0), 1000),
             y_max: Math.min(Math.max(y_max, 0), 1000),
             x_max: Math.min(Math.max(x_max, 0), 1000),
-            text: String(box.text || ''),
           };
         }),
       };
@@ -78,17 +118,15 @@ export class PipelineOrchestrator {
     }
   }
 
-  private parseTranslations(raw: string, originalTexts: string[]): Map<string, string> {
-    const map = new Map<string, string>();
+  private parseOcrAndTranslation(raw: string): GptTranslation[] {
     try {
-      // Remove markdown code blocks if present
       let json = raw;
+      // Limpiar posibles bloques de markdown que GPT-4o pueda incluir
       if (raw.includes('```')) {
         const start = raw.indexOf('```');
         const end = raw.lastIndexOf('```');
         if (start !== end && end > start) {
           json = raw.substring(start + 3, end).trim();
-          // Remove optional "json" language identifier
           if (json.startsWith('json')) {
             json = json.substring(4).trim();
           }
@@ -97,23 +135,17 @@ export class PipelineOrchestrator {
 
       const translations = JSON.parse(json);
       if (Array.isArray(translations)) {
-        translations.forEach((t: any) => {
-          if (t?.original && t?.translated) {
-            map.set(String(t.original), String(t.translated));
-          }
-        });
+        return translations.map((t: any) => ({
+          id: Number(t.id),
+          texto_japones: String(t.texto_japones ?? ''),
+          traduccion_espanol: String(t.traduccion_espanol ?? ''),
+        }));
       }
     } catch (error) {
-      console.warn('[Pipeline] Failed to parse translations:', error);
+      console.warn('[Pipeline] Failed to parse OCR and translations:', error);
+      console.warn('[Pipeline] Raw response was:', raw);
     }
-
-    // Fallback: if no translations found, map all originals to empty
-    if (map.size === 0) {
-      originalTexts.forEach((text) => {
-        map.set(text, '');
-      });
-    }
-
-    return map;
+    return [];
   }
 }
+

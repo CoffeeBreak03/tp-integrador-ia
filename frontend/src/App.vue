@@ -27,7 +27,16 @@
             <div v-if="isLoading" class="mb-4 rounded-2xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               <div class="flex items-center gap-2">
                 <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600"></div>
-                <p class="font-semibold">Procesando imagen...</p>
+                <div class="flex-1">
+                  <p class="font-semibold">{{ loadingMessage }}</p>
+                  <p class="mt-1 text-xs opacity-75">Tiempo: {{ loadingElapsedSeconds }}s</p>
+                  <p v-if="loadingElapsedSeconds > 10" class="mt-1 text-xs opacity-75 italic">
+                    ⚡ Iniciando servicio remoto (primera solicitud). Esto puede tomar hasta 60 segundos...
+                  </p>
+                </div>
+              </div>
+              <div class="mt-3 h-1 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900">
+                <div class="h-full animate-pulse bg-blue-400" style="width: 100%"></div>
               </div>
             </div>
 
@@ -128,6 +137,10 @@ const imageData = ref('');
 const translations = ref<TranslationContract[]>([]);
 const selectedItemId = ref<number | undefined>(undefined);
 const showOverlay = ref(true);
+const loadingElapsedSeconds = ref(0);
+const loadingMessage = ref('Procesando imagen...');
+let loadingTimer: number | null = null;
+let loadingStartTime: number | null = null;
 const showTranslations = ref(false);
 const isFitToScreen = ref(false);
 const isLoading = ref(false);
@@ -171,6 +184,7 @@ watch(
       translations.value = [];
       selectedItemId.value = undefined;
       errorMessage.value = null;
+      if (loadingTimer) clearInterval(loadingTimer);
       return;
     }
 
@@ -178,6 +192,16 @@ watch(
     selectedItemId.value = undefined;
     isLoading.value = true;
     errorMessage.value = null;
+    loadingElapsedSeconds.value = 0;
+    loadingMessage.value = 'Procesando imagen...';
+    loadingStartTime = Date.now();
+
+    // Actualizar tiempo transcurrido cada segundo
+    loadingTimer = window.setInterval(() => {
+      if (loadingStartTime) {
+        loadingElapsedSeconds.value = Math.floor((Date.now() - loadingStartTime) / 1000);
+      }
+    }, 1000);
 
     try {
       const result = await processImage(newImageData);
@@ -189,6 +213,8 @@ watch(
       translations.value = [];
     } finally {
       isLoading.value = false;
+      if (loadingTimer) clearInterval(loadingTimer);
+      loadingTimer = null;
     }
   },
   { immediate: false }
@@ -199,7 +225,10 @@ onMounted(() => {
   window.addEventListener('resize', recalcScale);
 });
 
-onUnmounted(() => window.removeEventListener('resize', recalcScale));
+onUnmounted(() => {
+  window.removeEventListener('resize', recalcScale);
+  if (loadingTimer) clearInterval(loadingTimer);
+});
 
 const highlightItem = (item: TranslationContract) => {
   selectedItemId.value = item.id;

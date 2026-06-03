@@ -14,7 +14,8 @@
 
 - Implemented view-height resizing: added `Ajustar tamaño` / `Restaurar tamaño` button in the main toolbar to shrink the manga image to fit the browser height (via `max-h-[calc(100vh-180px)]` and `h-full w-auto object-contain mx-auto`) while preserving exact overlay alignment. Improves desktop reading without scrolling, keeping the translation list intact.
 - Corrected fit-to-screen rendering so the image and overlay boxes scale together as a smaller page instead of clipping any content.
-- Refined the image container measurement so the manga page stays centered and overlay coordinates remain aligned when `Ajustar tamaño` is active.
+- Refined the image container measurement so the manga page stays centered and overlay coordinates remain aligned when `Ajustar tamaño` es activa.
+- Integración de backend: migrado el pipeline de detección/OCR a Hugging Face Space (`HF_SPACE_API_URL`), manteniendo Azure Foundry solo para la traducción de cada globo y devolviendo el contrato frontend esperado. **Backend API completamente funcional en mock mode**: API endpoint `/.netlify/functions/process` acepta POST con imagen base64, devuelve array de `TranslationBox[]` con coordenadas normalizadas 0-1000, textos originales traducidos. Tested con `mocks/ocr-response.json` + `mocks/translate-response.json`.
 
 ## 2_FRONTEND_MOCK_DRIVEN.md coverage
 - T2.1: Frontend setup, alias `@/`, Tailwind, PWA metadata.

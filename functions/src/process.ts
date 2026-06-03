@@ -38,8 +38,13 @@ export const handler: Handler = async (event, context) => {
     };
   } catch (error) {
     console.error('Process function error:', error);
+    const message = String(error ?? 'Unknown error').toLowerCase();
+    const statusCode = message.includes('hugging face') || message.includes('hf_space_api_url') || message.includes('timeout')
+      ? 502
+      : 500;
+
     return {
-      statusCode: 500,
+      statusCode,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ error: String(error) }),
     };

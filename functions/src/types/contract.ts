@@ -15,35 +15,26 @@ export interface VisionOutput {
     x_min: number;
     y_max: number;
     x_max: number;
-    text: string;
   }>;
 }
 
-const normalizeWhitespace = (text: string): string => {
-  return text.replace(/\s+/g, ' ').trim();
-};
+export interface GptTranslation {
+  id: number;
+  texto_japones: string;
+  traduccion_espanol: string;
+}
 
-export const denormalizeVisionToContract = (
+export const mergeVisionAndTranslation = (
   visionOutput: VisionOutput,
-  translations: Map<string, string>
+  translations: GptTranslation[]
 ): TranslationBox[] => {
   return visionOutput.boxes.map((box) => {
-    const normalized = normalizeWhitespace(box.text);
-    let translated = '';
-
-    // Try to find translation with normalized text
-    for (const [key, value] of translations.entries()) {
-      if (normalizeWhitespace(key) === normalized) {
-        translated = value;
-        break;
-      }
-    }
-
+    const translation = translations.find((t) => t.id === box.id);
     return {
       id: box.id,
       box: [box.y_min, box.x_min, box.y_max, box.x_max],
-      texto_original: box.text,
-      texto_traducido: translated,
+      texto_original: translation?.texto_japones ?? '',
+      texto_traducido: translation?.traduccion_espanol ?? '',
     };
   });
 };

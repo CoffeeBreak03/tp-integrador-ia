@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
+import { CroppedBubble } from './image-cropper';
 
 export interface AzureConfig {
   endpoint: string;
@@ -18,10 +19,8 @@ export class AzureClient {
 
   private async readMockFile(filename: string): Promise<any> {
     try {
-      // process.cwd() is functions/, so go up one level to workspace root
       const root = process.cwd();
-      const workspaceRoot = path.resolve(root, '..');
-      const p = path.join(workspaceRoot, 'mocks', filename);
+      const p = path.join(root, 'mocks', filename);
       if (fs.existsSync(p)) {
         const raw = await fs.promises.readFile(p, 'utf8');
         return JSON.parse(raw);
@@ -32,97 +31,292 @@ export class AzureClient {
     }
   }
 
-  async callVisionModel(imageBase64: string): Promise<string> {
-    if (process.env.USE_MOCK_AZURE === 'true') {
-      const mock = await this.readMockFile('ocr-response.json');
-      if (mock && Array.isArray(mock.boxes)) {
-        return JSON.stringify(mock.boxes);
-      }
-      return JSON.stringify([]);
+  private getHfSpaceUrl(): string {
+    const envUrl = process.env.HF_SPACE_API_URL?.trim();
+    const defaultUrl = 'https://coffeebreak03-manga-translate-ocr.hf.space';
+    const hfUrl = envUrl || defaultUrl;
+
+    if (!hfUrl) {
+      throw new Error('Missing HF_SPACE_API_URL environment variable');
     }
 
-    const url = `${this.config.endpoint.replace(/\/responses$/, '')}/chat/completions`;
-    const imageUrl = imageBase64.startsWith('data:')
-      ? imageBase64
-      : `data:image/jpeg;base64,${imageBase64}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'api-key': this.config.apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.config.modelVision,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageUrl,
-                },
-              },
-              {
-                type: 'text',
-                text: 'Extract all text from this manga image. For each text box, return JSON array with: {y_min, x_min, y_max, x_max (as 0-1000 pixel coords), text}. Return ONLY valid JSON array.',
-              },
-            ],
-          },
-        ],
-        max_tokens: 2000,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Azure vision API error: ${response.status} ${response.statusText} - ${errorBody}`);
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content ?? '';
+    return hfUrl.replace(/\/+$/, '');
   }
 
-  async callTranslateModel(texts: string | string[]): Promise<string> {
-    if (process.env.USE_MOCK_AZURE === 'true') {
-      const mock = await this.readMockFile('translate-response.json');
-      if (mock && Array.isArray(mock.translations)) {
-        return JSON.stringify(mock.translations.map((t: any) => ({ original: t.original, translated: t.translated })));
-      }
-      return JSON.stringify([]);
+  private normalizeBase64(imageBase64: string): string {
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      throw new Error('Invalid imageBase64 payload');
     }
 
-    // Support both single string and array of strings
-    const textList = Array.isArray(texts) ? texts : [texts];
-    const textContent = textList.map((t, i) => `${i + 1}. ${t}`).join('\n');
+    const commaIndex = imageBase64.indexOf(',');
+    if (commaIndex >= 0) {
+      return imageBase64.slice(commaIndex + 1).trim();
+    }
+
+    return imageBase64.trim();
+  }
+
+  async detectTextBubbles(imageBase64: string): Promise<string> {
+    const startTime = Date.now();
+    console.log('[HF_VISION] Starting YOLOv8 spatial detection');
+    
+    if (process.env.USE_MOCK_AZURE === 'true') {
+      console.log('[HF_VISION] Mock mode enabled, reading ocr-response.json');
+      const mock = await this.readMockFile('ocr-response.json');
+      
+      if (!mock) {
+        console.error('[HF_VISION] ERROR: Mock file is null');
+        return JSON.stringify([]);
+      }
+      
+      if (!Array.isArray(mock.boxes)) {
+        console.error('[HF_VISION] ERROR: mock.boxes is not an array, got:', typeof mock.boxes);
+        return JSON.stringify([]);
+      }
+      
+      console.log('[HF_VISION] Mock file loaded with', mock.boxes.length, 'boxes');
+      
+      // Convert mock format to HF Space format
+      const globos = mock.boxes.map((box: any) => ({
+        id: box.id,
+        box: [box.y_min, box.x_min, box.y_max, box.x_max],
+      }));
+      
+      const result = JSON.stringify(globos);
+      const elapsed = Date.now() - startTime;
+      console.log('[HF_VISION] Mock response ready:', result.length, 'bytes in', elapsed, 'ms');
+      return result;
+    }
+
+    console.log('[HF_VISION] Live mode: calling HF Space');
+    const hfUrl = this.getHfSpaceUrl();
+    console.log('[HF_VISION] HF Space URL:', hfUrl);
+    
+    const normalized = this.normalizeBase64(imageBase64);
+    console.log('[HF_VISION] Base64 normalized:', normalized.length, 'bytes');
+    
+    const payload = {
+      image_base64: normalized,
+    };
+
+    try {
+      const fetchStart = Date.now();
+      console.log('[HF_VISION] Sending request to HF Space...');
+      
+      const response = await fetch(`${hfUrl}/analyze-manga`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        timeout: 120000,
+      });
+      
+      const fetchTime = Date.now() - fetchStart;
+      console.log('[HF_VISION] Response received in', fetchTime, 'ms, status:', response.status);
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('[HF_VISION] ERROR: Non-OK response:', response.status, response.statusText);
+        throw new Error(`Hugging Face Space error: ${response.status} ${response.statusText} - ${errorBody}`);
+      }
+
+      const parseStart = Date.now();
+      const data = await response.json();
+      const parseTime = Date.now() - parseStart;
+      console.log('[HF_VISION] Response parsed in', parseTime, 'ms');
+      
+      if (!data) {
+        console.error('[HF_VISION] ERROR: Response data is null/undefined');
+        throw new Error('Invalid Hugging Face Space response: null data');
+      }
+      
+      if (!Array.isArray(data.globos)) {
+        console.error('[HF_VISION] ERROR: data.globos is not an array, got:', typeof data.globos);
+        throw new Error(`Invalid Hugging Face Space response: ${JSON.stringify(data)}`);
+      }
+      
+      console.log('[HF_VISION] HF Space returned', data.globos.length, 'items');
+      const result = JSON.stringify(data.globos);
+      const totalElapsed = Date.now() - startTime;
+      console.log('[HF_VISION] Complete in', totalElapsed, 'ms, response:', result.length, 'bytes');
+      return result;
+    } catch (error) {
+      const totalElapsed = Date.now() - startTime;
+      console.error('[HF_VISION] ERROR after', totalElapsed, 'ms:', error instanceof Error ? error.message : error);
+      throw error;
+    }
+  }
+
+  /**
+   * Llama a Azure GPT-4o con una lista de sub-imágenes (una por globo) ya cropeadas.
+   * Retorna JSON: [{ id, texto_japones, traduccion_espanol }]
+   */
+  async callOcrAndTranslation(croppedBubbles: CroppedBubble[]): Promise<string> {
+    const startTime = Date.now();
+    console.log('[AZURE_GPT4O] Starting OCR and Translation for', croppedBubbles.length, 'bubbles');
+    
+    if (process.env.USE_MOCK_AZURE === 'true') {
+      console.log('[AZURE_GPT4O] Mock mode enabled, reading translate-response.json');
+      const mock = await this.readMockFile('translate-response.json');
+      if (!mock || !Array.isArray(mock.translations)) {
+        return JSON.stringify([]);
+      }
+      
+      const result = croppedBubbles.map((bubble, i) => ({
+        id: bubble.id,
+        texto_japones: mock.translations[i]?.original || 'Mock Japanese',
+        traduccion_espanol: mock.translations[i]?.translated || 'Mock Spanish'
+      }));
+      
+      console.log('[AZURE_GPT4O] Mock response ready in', Date.now() - startTime, 'ms');
+      return JSON.stringify(result);
+    }
+
+    console.log('[AZURE_GPT4O] Live mode: calling Azure Foundry');
+    const url = `${this.config.endpoint.replace(/\/responses$/, '')}/chat/completions`;
+    console.log('[AZURE_GPT4O] Azure URL:', url);
+
+    // Construir el contenido multimodal: una entrada de texto + una imagen por globo
+    const userContent: any[] = [
+      {
+        type: 'text',
+        text:
+          `You will receive ${croppedBubbles.length} cropped manga speech bubble image(s), ` +
+          `each labelled with its ID. Read the Japanese text in each bubble and translate it to Spanish. ` +
+          `Return ONLY a valid JSON array using this exact format (no markdown, no extra text):\n` +
+          `[{"id": <id>, "texto_japones": "<japanese text>", "traduccion_espanol": "<spanish translation>"}]`
+      },
+    ];
+
+    for (const bubble of croppedBubbles) {
+      userContent.push({
+        type: 'text',
+        text: `--- Bubble ID: ${bubble.id} ---`
+      });
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:image/jpeg;base64,${bubble.base64}`,
+          detail: 'high'
+        }
+      });
+    }
+    
+    try {
+      const fetchStart = Date.now();
+      console.log('[AZURE_GPT4O] Sending request to Azure Foundry...');
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'api-key': this.config.apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.config.modelTranslate,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are an expert manga OCR and translation engine. ' +
+                'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
+                'Return ONLY a valid JSON array. No markdown, no explanations, no extra text.'
+            },
+            {
+              role: 'user',
+              content: userContent
+            }
+          ],
+          max_tokens: 4000,
+          temperature: 0.2
+        }),
+      });
+      
+      const fetchTime = Date.now() - fetchStart;
+      console.log('[AZURE_GPT4O] Response received in', fetchTime, 'ms, status:', response.status);
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('[AZURE_GPT4O] ERROR: Non-OK response:', response.status, response.statusText);
+        throw new Error(`Azure GPT-4o API error: ${response.status} ${response.statusText} - ${errorBody}`);
+      }
+
+      const data = await response.json();
+      console.log('[AZURE_GPT4O] Response parsed in', Date.now() - startTime, 'ms total');
+      
+      const content = data.choices?.[0]?.message?.content ?? '';
+      if (!content) {
+        console.error('[AZURE_GPT4O] ERROR: Empty content in response');
+      }
+      
+      console.log('[AZURE_GPT4O] Complete in', Date.now() - startTime, 'ms, content length:', content.length);
+      return content;
+    } catch (error) {
+      console.error('[AZURE_GPT4O] ERROR after', Date.now() - startTime, 'ms:', error instanceof Error ? error.message : error);
+      throw error;
+    }
+  }
+
+  /**
+   * Compatibility wrapper calling detectTextBubbles (YOLOv8)
+   */
+  async callVisionModel(imageBase64: string): Promise<string> {
+    return this.detectTextBubbles(imageBase64);
+  }
+
+  /**
+   * Compatibility wrapper doing text-only translation using GPT-4o
+   */
+  async callTranslateModel(text: string): Promise<string> {
+    const startTime = Date.now();
+    console.log('[AZURE_GPT4O] Starting standalone translation (compatibility wrapper)');
+    
+    if (process.env.USE_MOCK_AZURE === 'true') {
+      console.log('[AZURE_GPT4O] Mock translation enabled');
+      return 'Mock translation';
+    }
 
     const url = `${this.config.endpoint.replace(/\/responses$/, '')}/chat/completions`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'api-key': this.config.apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.config.modelTranslate,
-        messages: [
-          {
-            role: 'user',
-            content: `Translate these texts to Spanish maintaining context. Return ONLY a JSON array with [{original: "...", translated: "..."}, ...] format:\n\n${textContent}`,
-          },
-        ],
-        max_tokens: 2000,
-      }),
-    });
+    console.log('[AZURE_GPT4O] Azure URL:', url);
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Azure translate API error: ${response.status} ${response.statusText} - ${errorBody}`);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'api-key': this.config.apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.config.modelTranslate,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert translator. Translate the following text to Spanish, maintaining context and meaning.'
+            },
+            {
+              role: 'user',
+              content: text
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.3
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Azure GPT-4o translation error: ${response.status} ${response.statusText} - ${errorBody}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content ?? '';
+      console.log('[AZURE_GPT4O] Standalone translation complete in', Date.now() - startTime, 'ms');
+      return content;
+    } catch (error) {
+      console.error('[AZURE_GPT4O] Standalone translation error:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content ?? '';
   }
 }
 
