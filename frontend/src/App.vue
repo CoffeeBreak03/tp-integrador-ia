@@ -2,17 +2,25 @@
   <div class="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
     <div class="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
       <header class="space-y-3">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-400">TP Integrador IA</p>
-            <h1 class="text-3xl font-bold sm:text-4xl">Traductor de Manga</h1>
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <img src="/favicon.png" alt="Manga Translate Logo" class="h-10 w-10 object-contain sm:h-12 sm:w-12" />
+            <h1 class="text-3xl font-bold sm:text-4xl">Manga Translate</h1>
           </div>
-          <div class="rounded-3xl bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm dark:bg-slate-900/90 dark:text-slate-300">
-            Frontend integrado con backend .netlify/functions/process
-          </div>
+          <button
+            id="dark-mode-toggle"
+            type="button"
+            @click="toggleDark"
+            :aria-label="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+            :title="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+            class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-lg shadow-sm transition-all duration-300 hover:border-blue-400 hover:bg-blue-50 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:hover:border-blue-400 dark:hover:bg-slate-700"
+          >
+            <span v-if="isDark" class="transition-transform duration-300">☀️</span>
+            <span v-else class="transition-transform duration-300">🌙</span>
+          </button>
         </div>
         <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-          Carga una imagen o PDF, envíala al backend para OCR y traducción, luego visualiza las traducciones con posicionamiento normalizado.
+          Traduce tus páginas de manga al instante. Sube una imagen para digitalizar y traducir su contenido automáticamente.
         </p>
       </header>
 
@@ -67,9 +75,6 @@
                   {{ isFitToScreen ? 'Restaurar tamaño' : 'Ajustar tamaño' }}
                 </button>
               </div>
-              <p class="text-sm text-slate-600 dark:text-slate-400">
-                Imagen céntrica con overlay opcional. El panel derecho se desliza para mostrar las traducciones.
-              </p>
             </div>
 
             <div class="relative mt-4 overflow-hidden rounded-3xl bg-slate-100 p-4 dark:bg-slate-950">
@@ -126,6 +131,21 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch, nextTick, onUnmounted } from 'vue';
+
+// --- Dark mode ---
+const isDark = ref(false);
+
+const applyDark = (value: boolean) => {
+  isDark.value = value;
+  if (value) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+  localStorage.setItem('theme', value ? 'dark' : 'light');
+};
+
+const toggleDark = () => applyDark(!isDark.value);
 import ImageUploader from '@/components/ImageUploader.vue';
 import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
@@ -221,6 +241,11 @@ watch(
 );
 
 onMounted(() => {
+  // Inicializar dark mode: preferencia guardada o preferencia del sistema
+  const saved = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyDark(saved === 'dark' || (!saved && prefersDark));
+
   recalcScale();
   window.addEventListener('resize', recalcScale);
 });
