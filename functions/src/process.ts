@@ -5,6 +5,7 @@ import { validateTranslationContract } from './lib/validate-contract';
 
 interface ProcessRequest {
   imageBase64: string;
+  contexto?: string;
 }
 
 export const handler: Handler = async (event, context) => {
@@ -28,13 +29,16 @@ export const handler: Handler = async (event, context) => {
 
     const azureClient = getAzureClient();
     const orchestrator = new PipelineOrchestrator(azureClient);
-    const result = await orchestrator.processMangaImage(body.imageBase64);
-    const validated = validateTranslationContract(result);
+    const result = await orchestrator.processMangaImage(body.imageBase64, body.contexto);
+    const validated = validateTranslationContract(result.translations);
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(validated),
+      body: JSON.stringify({
+        contexto: result.contexto,
+        translations: validated,
+      }),
     };
   } catch (error) {
     console.error('Process function error:', error);

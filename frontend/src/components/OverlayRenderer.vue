@@ -20,6 +20,15 @@
             :class="imageClass"
           />
 
+          <!-- Spinner de carga centrado sobre la imagen -->
+          <div
+            v-if="isLoading && translations.length === 0"
+            class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-sm"
+          >
+            <div class="h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent"></div>
+            <p class="mt-3 text-sm font-medium text-white">Procesando página...</p>
+          </div>
+
           <template v-if="showOverlay">
             <div
               v-for="item in translations"
@@ -51,6 +60,7 @@ const props = defineProps<{
   selectedItemId?: number;
   showOverlay: boolean;
   fitToScreen?: boolean;
+  isLoading?: boolean;
 }>();
 
 const imgRef = ref<HTMLImageElement | null>(null);

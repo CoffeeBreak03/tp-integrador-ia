@@ -14,9 +14,12 @@ export declare class AzureClient {
     detectTextBubbles(imageBase64: string): Promise<string>;
     /**
      * Llama a Azure GPT-4o con una lista de sub-imágenes (una por globo) ya cropeadas.
-     * Retorna JSON: [{ id, texto_japones, traduccion_espanol }]
+     * Retorna JSON con contexto y traducciones:
+     * { "contexto": "...", "traducciones": [{ id, texto_japones, traduccion_espanol }] }
+     *
+     * Si no se provee contexto, retorna el mismo formato con contexto vacío.
      */
-    callOcrAndTranslation(croppedBubbles: CroppedBubble[]): Promise<string>;
+    callOcrAndTranslation(croppedBubbles: CroppedBubble[], contexto?: string): Promise<string>;
     /**
      * Compatibility wrapper calling detectTextBubbles (YOLOv8)
      */

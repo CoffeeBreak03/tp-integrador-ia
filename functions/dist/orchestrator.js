@@ -7,9 +7,12 @@ class PipelineOrchestrator {
     constructor(azureClient) {
         this.azureClient = azureClient;
     }
-    async processMangaImage(imageBase64) {
+    async processMangaImage(imageBase64, contexto) {
         const startTime = Date.now();
         console.log('[ORCHESTRATOR] Starting processMangaImage, input size:', imageBase64.length, 'bytes');
+        if (contexto) {
+            console.log('[ORCHESTRATOR] Chapter context provided:', contexto.length, 'chars');
+        }
         try {
             // --- Paso A: Detección espacial con Hugging Face (YOLOv8) ---
             console.log('[ORCHESTRATOR] Step 1: Calling HF space for spatial detection...');
@@ -17,14 +20,14 @@ class PipelineOrchestrator {
             console.log('[ORCHESTRATOR] Spatial detection raw response:', visionRaw.length, 'bytes');
             if (!visionRaw || visionRaw === '[]') {
                 console.error('[ORCHESTRATOR] ERROR: HF returned empty response');
-                return [];
+                return { contexto: contexto || '', translations: [] };
             }
             console.log('[ORCHESTRATOR] Step 2: Parsing spatial output...');
             const visionOutput = this.parseVisionOutput(visionRaw);
             console.log('[ORCHESTRATOR] Spatial output parsed:', visionOutput.boxes.length, 'boxes');
             if (visionOutput.boxes.length === 0) {
                 console.error('[ORCHESTRATOR] ERROR: No boxes extracted from spatial detection');
-                return [];
+                return { contexto: contexto || '', translations: [] };
             }
             // --- Paso B: Croppear cada globo usando las coordenadas ---
             console.log('[ORCHESTRATOR] Step 3: Cropping individual bubbles...');
@@ -32,29 +35,29 @@ class PipelineOrchestrator {
             console.log('[ORCHESTRATOR] Cropped', croppedBubbles.length, 'bubbles');
             if (croppedBubbles.length === 0) {
                 console.error('[ORCHESTRATOR] ERROR: No bubbles could be cropped');
-                return [];
+                return { contexto: contexto || '', translations: [] };
             }
-            // --- Paso C: OCR y Traducción con Azure GPT-4o ---
+            // --- Paso C: OCR y Traducción con Azure GPT-4o (con contexto) ---
             console.log('[ORCHESTRATOR] Step 4: Calling GPT-4o for OCR and translation...');
-            const translatedRaw = await this.azureClient.callOcrAndTranslation(croppedBubbles);
+            const translatedRaw = await this.azureClient.callOcrAndTranslation(croppedBubbles, contexto);
             console.log('[ORCHESTRATOR] OCR/Translate raw response length:', translatedRaw.length, 'bytes');
             if (!translatedRaw) {
                 console.error('[ORCHESTRATOR] ERROR: Translation returned empty response');
-                return [];
+                return { contexto: contexto || '', translations: [] };
             }
             console.log('[ORCHESTRATOR] Step 5: Parsing GPT-4o output...');
-            const translations = this.parseOcrAndTranslation(translatedRaw);
-            console.log('[ORCHESTRATOR] GPT-4o output parsed:', translations.length, 'items');
-            if (translations.length === 0) {
+            const { translations: gptTranslations, contexto: updatedContexto } = this.parseOcrAndTranslation(translatedRaw, contexto);
+            console.log('[ORCHESTRATOR] GPT-4o output parsed:', gptTranslations.length, 'items, context:', updatedContexto.length, 'chars');
+            if (gptTranslations.length === 0) {
                 console.error('[ORCHESTRATOR] ERROR: No translations parsed from GPT-4o response');
             }
             // --- Paso D: Fusionar coordenadas + textos en la respuesta final ---
             console.log('[ORCHESTRATOR] Step 6: Merging results to contract...');
-            const result = (0, contract_1.mergeVisionAndTranslation)(visionOutput, translations);
+            const result = (0, contract_1.mergeVisionAndTranslation)(visionOutput, gptTranslations);
             console.log('[ORCHESTRATOR] Final result:', result.length, 'items');
             const totalTime = Date.now() - startTime;
             console.log('[ORCHESTRATOR] Complete in', totalTime, 'ms');
-            return result;
+            return { contexto: updatedContexto, translations: result };
         }
         catch (error) {
             const totalTime = Date.now() - startTime;
@@ -104,7 +107,13 @@ class PipelineOrchestrator {
             return { boxes: [] };
         }
     }
-    parseOcrAndTranslation(raw) {
+    /**
+     * Parsea la respuesta de GPT-4o que ahora viene en formato:
+     * { "contexto": "...", "traducciones": [{ id, texto_japones, traduccion_espanol }] }
+     *
+     * También soporta el formato legacy (array directo) por retrocompatibilidad.
+     */
+    parseOcrAndTranslation(raw, fallbackContexto) {
         try {
             let json = raw;
             // Limpiar posibles bloques de markdown que GPT-4o pueda incluir
@@ -118,20 +127,37 @@ class PipelineOrchestrator {
                     }
                 }
             }
-            const translations = JSON.parse(json);
-            if (Array.isArray(translations)) {
-                return translations.map((t) => ({
-                    id: Number(t.id),
-                    texto_japones: String(t.texto_japones ?? ''),
-                    traduccion_espanol: String(t.traduccion_espanol ?? ''),
-                }));
+            const parsed = JSON.parse(json);
+            // Nuevo formato: { contexto, traducciones }
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const contexto = typeof parsed.contexto === 'string' ? parsed.contexto : (fallbackContexto || '');
+                const traducciones = Array.isArray(parsed.traducciones) ? parsed.traducciones : [];
+                return {
+                    contexto,
+                    translations: traducciones.map((t) => ({
+                        id: Number(t.id),
+                        texto_japones: String(t.texto_japones ?? ''),
+                        traduccion_espanol: String(t.traduccion_espanol ?? ''),
+                    })),
+                };
+            }
+            // Formato legacy: array directo [{ id, texto_japones, traduccion_espanol }]
+            if (Array.isArray(parsed)) {
+                return {
+                    contexto: fallbackContexto || '',
+                    translations: parsed.map((t) => ({
+                        id: Number(t.id),
+                        texto_japones: String(t.texto_japones ?? ''),
+                        traduccion_espanol: String(t.traduccion_espanol ?? ''),
+                    })),
+                };
             }
         }
         catch (error) {
             console.warn('[Pipeline] Failed to parse OCR and translations:', error);
             console.warn('[Pipeline] Raw response was:', raw);
         }
-        return [];
+        return { contexto: fallbackContexto || '', translations: [] };
     }
 }
 exports.PipelineOrchestrator = PipelineOrchestrator;

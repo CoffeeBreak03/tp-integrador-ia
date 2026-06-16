@@ -43,7 +43,7 @@ export const isNormalizedBox = (box: unknown): box is [number, number, number, n
     Array.isArray(box) &&
     box.length === 4 &&
     box.every(
-      (value) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 1000
+      (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1000
     )
   );
 };

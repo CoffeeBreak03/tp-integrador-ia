@@ -13,6 +13,15 @@ export interface VisionOutput {
         x_max: number;
     }>;
 }
+/**
+ * Resultado de procesar una página con contexto acumulativo.
+ * El campo `contexto` se reenvía a la siguiente página para mantener
+ * coherencia narrativa en traducciones de capítulos completos.
+ */
+export interface PageProcessResult {
+    contexto: string;
+    translations: TranslationBox[];
+}
 export interface GptTranslation {
     id: number;
     texto_japones: string;

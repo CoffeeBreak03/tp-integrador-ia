@@ -5,12 +5,20 @@ export interface TranslationContract {
   texto_traducido: string;
 }
 
+/**
+ * Respuesta del backend para procesamiento de una página con contexto acumulativo.
+ */
+export interface ProcessPageResponse {
+  contexto: string;
+  translations: TranslationContract[];
+}
+
 const isNormalizedBox = (box: unknown): box is [number, number, number, number] => {
   return (
     Array.isArray(box) &&
     box.length === 4 &&
     box.every(
-      (coord) => typeof coord === 'number' && Number.isInteger(coord) && coord >= 0 && coord <= 1000
+      (coord) => typeof coord === 'number' && Number.isFinite(coord) && coord >= 0 && coord <= 1000
     )
   );
 };

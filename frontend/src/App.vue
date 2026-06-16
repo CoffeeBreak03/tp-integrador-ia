@@ -20,7 +20,7 @@
           </button>
         </div>
         <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-          Traduce tus páginas de manga al instante. Sube una imagen para digitalizar y traducir su contenido automáticamente.
+          Traduce tus páginas de manga al instante. Sube una imagen, PDF o ZIP para digitalizar y traducir su contenido automáticamente.
         </p>
       </header>
 
@@ -32,7 +32,7 @@
               <p class="mt-1">{{ errorMessage }}</p>
             </div>
 
-            <div v-if="isLoading" class="mb-4 rounded-2xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+            <div v-if="isLoading && !isChapterMode" class="mb-4 rounded-2xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               <div class="flex items-center gap-2">
                 <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600"></div>
                 <div class="flex-1">
@@ -48,12 +48,31 @@
               </div>
             </div>
 
+            <!-- Barra de progreso del capítulo -->
+            <div v-if="isChapterMode && isProcessingChapter" class="mb-4 rounded-2xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <div class="flex items-center gap-2">
+                <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600"></div>
+                <div class="flex-1">
+                  <p class="font-semibold">Procesando capítulo...</p>
+                  <p class="mt-1 text-xs opacity-75">
+                    Página {{ processedPagesCount }} de {{ chapterPages.length }} procesadas
+                  </p>
+                </div>
+              </div>
+              <div class="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900">
+                <div
+                  class="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out"
+                  :style="{ width: `${(processedPagesCount / chapterPages.length) * 100}%` }"
+                ></div>
+              </div>
+            </div>
+
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-x-2">
                 <button
                   type="button"
                   @click="showOverlay = !showOverlay"
-                  :disabled="isLoading"
+                  :disabled="isLoading && !isChapterMode"
                   class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                 >
                   {{ showOverlay ? 'Ocultar overlays' : 'Mostrar overlays' }}
@@ -61,7 +80,7 @@
                 <button
                   type="button"
                   @click="showTranslations = !showTranslations"
-                  :disabled="isLoading"
+                  :disabled="isLoading && !isChapterMode"
                   class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                 >
                   {{ showTranslations ? 'Ocultar lista' : 'Mostrar lista' }}
@@ -69,13 +88,24 @@
                 <button
                   type="button"
                   @click="isFitToScreen = !isFitToScreen"
-                  :disabled="isLoading"
+                  :disabled="isLoading && !isChapterMode"
                   class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                 >
                   {{ isFitToScreen ? 'Restaurar tamaño' : 'Ajustar tamaño' }}
                 </button>
               </div>
             </div>
+
+            <!-- Navegación de páginas (solo en modo capítulo) -->
+            <PageNavigator
+              v-if="isChapterMode"
+              class="mt-4"
+              :currentPage="currentPageIndex + 1"
+              :totalPages="chapterPages.length"
+              :isCurrentPageLoading="isCurrentPageLoading"
+              :processedPages="processedPagesCount"
+              @goToPage="goToPage"
+            />
 
             <div class="relative mt-4 overflow-hidden rounded-3xl bg-slate-100 p-4 dark:bg-slate-950">
               <div class="relative mx-auto flex max-w-6xl justify-center">
@@ -87,28 +117,30 @@
                   <div class="relative" style="transform-origin: right bottom;">
                     <ImageUploader
                       ref="imageUploader"
-                      :imageData="imageData"
-                      @update:imageData="(value) => imageData = value"
+                      :imageData="currentImageData"
+                      @update:imageData="handleSingleImage"
+                      @chapterLoaded="handleChapterLoaded"
                     />
 
                     <OverlayRenderer
-                      v-if="imageData"
-                      :imageData="imageData"
-                      :translations="translations"
+                      v-if="currentImageData"
+                      :imageData="currentImageData"
+                      :translations="currentTranslations"
                       :selectedItemId="selectedItemId"
                       :showOverlay="showOverlay"
                       :fitToScreen="isFitToScreen"
+                      :isLoading="isCurrentPageLoading"
                     />
                   </div>
 
-                  <div v-if="imageData" class="mt-4 flex justify-center">
+                  <div v-if="currentImageData" class="mt-4 flex justify-center">
                     <button
                       type="button"
                       @click="openExplorer"
-                      :disabled="isLoading"
+                      :disabled="isLoading && !isChapterMode"
                       class="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
                     >
-                      Agregar otra imagen
+                      Cargar otro archivo
                     </button>
                   </div>
                 </div>
@@ -118,7 +150,7 @@
                   class="pointer-events-none absolute right-0 top-0 h-full w-80 overflow-auto transition-transform duration-300"
                   :class="showTranslations ? 'pointer-events-auto translate-x-0' : 'translate-x-full'"
                 >
-                  <TranslationPanel v-if="translations.length" :translations="translations" @selectItem="highlightItem" />
+                  <TranslationPanel v-if="currentTranslations.length" :translations="currentTranslations" @selectItem="highlightItem" />
                 </aside>
               </div>
             </div>
@@ -149,25 +181,74 @@ const toggleDark = () => applyDark(!isDark.value);
 import ImageUploader from '@/components/ImageUploader.vue';
 import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
+import PageNavigator from '@/components/PageNavigator.vue';
 import { TranslationContract } from '@/lib/contract';
-import { processImage } from '@/lib/api';
+import { processPage } from '@/lib/api';
 
+// --- Refs del DOM ---
 const imageUploader = ref<{ openExplorer: () => void } | null>(null);
-const imageData = ref('');
-const translations = ref<TranslationContract[]>([]);
+const centerContainer = ref<HTMLElement | null>(null);
+const asidePanel = ref<HTMLElement | null>(null);
+
+// --- Estado común ---
 const selectedItemId = ref<number | undefined>(undefined);
 const showOverlay = ref(true);
-const loadingElapsedSeconds = ref(0);
-const loadingMessage = ref('Procesando imagen...');
-let loadingTimer: number | null = null;
-let loadingStartTime: number | null = null;
 const showTranslations = ref(false);
 const isFitToScreen = ref(false);
 const isLoading = ref(false);
 const errorMessage = ref<string | null>(null);
+const loadingElapsedSeconds = ref(0);
+const loadingMessage = ref('Procesando imagen...');
+let loadingTimer: number | null = null;
+let loadingStartTime: number | null = null;
 
-const centerContainer = ref<HTMLElement | null>(null);
-const asidePanel = ref<HTMLElement | null>(null);
+// --- Estado de imagen individual (legacy) ---
+const singleImageData = ref('');
+const singleTranslations = ref<TranslationContract[]>([]);
+
+// --- Estado del capítulo (multi-página) ---
+const chapterPages = ref<string[]>([]);
+const currentPageIndex = ref(0);
+const chapterContext = ref('');
+const isProcessingChapter = ref(false);
+let chapterProcessingAborted = false;
+
+interface CachedPage {
+  translations: TranslationContract[];
+  contexto: string;
+}
+const pageCache = ref<Map<number, CachedPage>>(new Map());
+const pagesInProcess = ref<Set<number>>(new Set());
+
+// --- Computed ---
+const isChapterMode = computed(() => chapterPages.value.length > 1);
+
+const currentImageData = computed(() => {
+  if (isChapterMode.value) {
+    return chapterPages.value[currentPageIndex.value] ?? '';
+  }
+  return singleImageData.value;
+});
+
+const currentTranslations = computed(() => {
+  if (isChapterMode.value) {
+    const cached = pageCache.value.get(currentPageIndex.value);
+    return cached?.translations ?? [];
+  }
+  return singleTranslations.value;
+});
+
+const isCurrentPageLoading = computed(() => {
+  if (isChapterMode.value) {
+    const idx = currentPageIndex.value;
+    return pagesInProcess.value.has(idx) || (!pageCache.value.has(idx) && isProcessingChapter.value);
+  }
+  return isLoading.value;
+});
+
+const processedPagesCount = computed(() => pageCache.value.size);
+
+// --- Escala del contenedor ---
 const scale = ref(1);
 
 const centerStyle = computed(() => ({
@@ -191,57 +272,165 @@ const recalcScale = () => {
   scale.value = s;
 };
 
-watch(imageData, async () => {
+// --- Procesamiento de imagen individual ---
+const startLoadingTimer = () => {
+  loadingElapsedSeconds.value = 0;
+  loadingStartTime = Date.now();
+  loadingTimer = window.setInterval(() => {
+    if (loadingStartTime) {
+      loadingElapsedSeconds.value = Math.floor((Date.now() - loadingStartTime) / 1000);
+    }
+  }, 1000);
+};
+
+const stopLoadingTimer = () => {
+  if (loadingTimer) clearInterval(loadingTimer);
+  loadingTimer = null;
+};
+
+const handleSingleImage = async (imageDataUrl: string) => {
+  // Resetear modo capítulo
+  resetChapter();
+  singleImageData.value = imageDataUrl;
+  singleTranslations.value = [];
+  selectedItemId.value = undefined;
+  errorMessage.value = null;
+
+  if (!imageDataUrl) return;
+
+  isLoading.value = true;
+  loadingMessage.value = 'Procesando imagen...';
+  startLoadingTimer();
+
+  try {
+    const result = await processPage(imageDataUrl);
+    singleTranslations.value = result.translations || [];
+  } catch (error) {
+    errorMessage.value = error instanceof Error
+      ? error.message
+      : 'Error desconocido al procesar la imagen';
+    singleTranslations.value = [];
+  } finally {
+    isLoading.value = false;
+    stopLoadingTimer();
+  }
+};
+
+// --- Procesamiento de capítulo (multi-página) ---
+const resetChapter = () => {
+  chapterProcessingAborted = true;
+  chapterPages.value = [];
+  currentPageIndex.value = 0;
+  chapterContext.value = '';
+  pageCache.value = new Map();
+  pagesInProcess.value = new Set();
+  isProcessingChapter.value = false;
+};
+
+const handleChapterLoaded = async (pages: string[]) => {
+  // Resetear estado anterior
+  resetChapter();
+  singleImageData.value = '';
+  singleTranslations.value = [];
+  errorMessage.value = null;
+  selectedItemId.value = undefined;
+
+  // Cargar nuevas páginas
+  chapterProcessingAborted = false;
+  chapterPages.value = pages;
+  currentPageIndex.value = 0;
+
+  await nextTick();
+  recalcScale();
+
+  // Iniciar procesamiento secuencial
+  processChapterSequentially();
+};
+
+const processChapterSequentially = async () => {
+  isProcessingChapter.value = true;
+
+  for (let i = 0; i < chapterPages.value.length; i++) {
+    // Verificar si se abortó el procesamiento (por ej. si el usuario cargó otro archivo)
+    if (chapterProcessingAborted) {
+      console.log('[CHAPTER] Processing aborted at page', i);
+      break;
+    }
+
+    // Saltar si ya está en caché
+    if (pageCache.value.has(i)) {
+      console.log('[CHAPTER] Page', i, 'already cached, skipping');
+      continue;
+    }
+
+    pagesInProcess.value.add(i);
+
+    try {
+      console.log('[CHAPTER] Processing page', i + 1, '/', chapterPages.value.length);
+      const result = await processPage(
+        chapterPages.value[i],
+        chapterContext.value || undefined
+      );
+
+      // Si se abortó mientras procesaba, no cachear
+      if (chapterProcessingAborted) break;
+
+      // Cachear resultado
+      pageCache.value.set(i, {
+        translations: result.translations,
+        contexto: result.contexto,
+      });
+
+      // Actualizar contexto acumulativo para la siguiente página
+      if (result.contexto) {
+        chapterContext.value = result.contexto;
+      }
+
+      console.log('[CHAPTER] Page', i + 1, 'complete:', result.translations.length, 'boxes, context:', result.contexto.length, 'chars');
+    } catch (error) {
+      console.error('[CHAPTER] Error processing page', i + 1, ':', error);
+
+      // Si se abortó, no mostrar error
+      if (chapterProcessingAborted) break;
+
+      // Cachear una entrada vacía para no bloquear la cola
+      pageCache.value.set(i, {
+        translations: [],
+        contexto: chapterContext.value,
+      });
+
+      // Mostrar error solo si es la página actual
+      if (i === currentPageIndex.value) {
+        errorMessage.value = error instanceof Error
+          ? `Error en página ${i + 1}: ${error.message}`
+          : `Error desconocido en página ${i + 1}`;
+      }
+    } finally {
+      pagesInProcess.value.delete(i);
+    }
+  }
+
+  isProcessingChapter.value = false;
+};
+
+// --- Navegación de páginas ---
+const goToPage = (pageNumber: number) => {
+  const idx = pageNumber - 1;
+  if (idx < 0 || idx >= chapterPages.value.length) return;
+
+  currentPageIndex.value = idx;
+  selectedItemId.value = undefined;
+  errorMessage.value = null;
+};
+
+// --- Watchers ---
+watch(currentImageData, async () => {
   await nextTick();
   recalcScale();
 });
 
-// Procesar imagen cuando se carga
-watch(
-  imageData,
-  async (newImageData) => {
-    if (!newImageData) {
-      translations.value = [];
-      selectedItemId.value = undefined;
-      errorMessage.value = null;
-      if (loadingTimer) clearInterval(loadingTimer);
-      return;
-    }
-
-    translations.value = [];
-    selectedItemId.value = undefined;
-    isLoading.value = true;
-    errorMessage.value = null;
-    loadingElapsedSeconds.value = 0;
-    loadingMessage.value = 'Procesando imagen...';
-    loadingStartTime = Date.now();
-
-    // Actualizar tiempo transcurrido cada segundo
-    loadingTimer = window.setInterval(() => {
-      if (loadingStartTime) {
-        loadingElapsedSeconds.value = Math.floor((Date.now() - loadingStartTime) / 1000);
-      }
-    }, 1000);
-
-    try {
-      const result = await processImage(newImageData);
-      translations.value = result || [];
-    } catch (error) {
-      errorMessage.value = error instanceof Error 
-        ? error.message 
-        : 'Error desconocido al procesar la imagen';
-      translations.value = [];
-    } finally {
-      isLoading.value = false;
-      if (loadingTimer) clearInterval(loadingTimer);
-      loadingTimer = null;
-    }
-  },
-  { immediate: false }
-);
-
+// --- Lifecycle ---
 onMounted(() => {
-  // Inicializar dark mode: preferencia guardada o preferencia del sistema
   const saved = localStorage.getItem('theme');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   applyDark(saved === 'dark' || (!saved && prefersDark));
@@ -252,9 +441,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', recalcScale);
-  if (loadingTimer) clearInterval(loadingTimer);
+  stopLoadingTimer();
+  chapterProcessingAborted = true;
 });
 
+// --- Handlers de UI ---
 const highlightItem = (item: TranslationContract) => {
   selectedItemId.value = item.id;
 };

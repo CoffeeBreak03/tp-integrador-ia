@@ -121,38 +121,54 @@ class AzureClient {
     }
     /**
      * Llama a Azure GPT-4o con una lista de sub-imágenes (una por globo) ya cropeadas.
-     * Retorna JSON: [{ id, texto_japones, traduccion_espanol }]
+     * Retorna JSON con contexto y traducciones:
+     * { "contexto": "...", "traducciones": [{ id, texto_japones, traduccion_espanol }] }
+     *
+     * Si no se provee contexto, retorna el mismo formato con contexto vacío.
      */
-    async callOcrAndTranslation(croppedBubbles) {
+    async callOcrAndTranslation(croppedBubbles, contexto) {
         const startTime = Date.now();
         console.log('[AZURE_GPT4O] Starting OCR and Translation for', croppedBubbles.length, 'bubbles');
+        if (contexto) {
+            console.log('[AZURE_GPT4O] Chapter context provided:', contexto.length, 'chars');
+        }
         if (process.env.USE_MOCK_AZURE === 'true') {
             console.log('[AZURE_GPT4O] Mock mode enabled, reading translate-response.json');
             const mock = await this.readMockFile('translate-response.json');
             if (!mock || !Array.isArray(mock.translations)) {
-                return JSON.stringify([]);
+                return JSON.stringify({ contexto: '', traducciones: [] });
             }
-            const result = croppedBubbles.map((bubble, i) => ({
+            const traducciones = croppedBubbles.map((bubble, i) => ({
                 id: bubble.id,
                 texto_japones: mock.translations[i]?.original || 'Mock Japanese',
                 traduccion_espanol: mock.translations[i]?.translated || 'Mock Spanish'
             }));
             console.log('[AZURE_GPT4O] Mock response ready in', Date.now() - startTime, 'ms');
-            return JSON.stringify(result);
+            return JSON.stringify({
+                contexto: contexto ? contexto + ' [mock-updated]' : 'Mock context for chapter.',
+                traducciones
+            });
         }
         console.log('[AZURE_GPT4O] Live mode: calling Azure Foundry');
         const url = `${this.config.endpoint.replace(/\/responses$/, '')}/chat/completions`;
         console.log('[AZURE_GPT4O] Azure URL:', url);
         // Construir el contenido multimodal: una entrada de texto + una imagen por globo
-        const userContent = [
-            {
-                type: 'text',
-                text: `You will receive ${croppedBubbles.length} cropped manga speech bubble image(s), ` +
-                    `each labelled with its ID. Read the Japanese text in each bubble and translate it to Spanish. ` +
-                    `Return ONLY a valid JSON array using this exact format (no markdown, no extra text):\n` +
-                    `[{"id": <id>, "texto_japones": "<japanese text>", "traduccion_espanol": "<spanish translation>"}]`
-            },
-        ];
+        const userContent = [];
+        // Instrucción principal con formato de respuesta esperado
+        let instructionText = `You will receive ${croppedBubbles.length} cropped manga speech bubble image(s), ` +
+            `each labelled with its ID. Read the Japanese text in each bubble and translate it to Spanish.\n\n` +
+            `Return ONLY a valid JSON object (no markdown, no extra text) with this exact structure:\n` +
+            `{\n` +
+            `  "contexto": "<updated chapter context summarizing key story elements, character names, tone and events so far, max 2000 chars>",\n` +
+            `  "traducciones": [{"id": <id>, "texto_japones": "<japanese text>", "traduccion_espanol": "<spanish translation>"}]\n` +
+            `}`;
+        // Si hay contexto previo del capítulo, incluirlo
+        if (contexto) {
+            instructionText +=
+                `\n\nChapter context from previous pages (use it to maintain narrative coherence and update it with new info from this page):\n` +
+                    `${contexto}`;
+        }
+        userContent.push({ type: 'text', text: instructionText });
         for (const bubble of croppedBubbles) {
             userContent.push({
                 type: 'text',
@@ -169,6 +185,15 @@ class AzureClient {
         try {
             const fetchStart = Date.now();
             console.log('[AZURE_GPT4O] Sending request to Azure Foundry...');
+            const systemPrompt = contexto
+                ? 'You are an expert manga OCR and translation engine working on a multi-page chapter. ' +
+                    'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
+                    'Use the chapter context provided to maintain narrative coherence (consistent names, tone, pronouns). ' +
+                    'Update the context field with any new relevant information from this page. ' +
+                    'Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.'
+                : 'You are an expert manga OCR and translation engine. ' +
+                    'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
+                    'Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.';
             const response = await (0, node_fetch_1.default)(url, {
                 method: 'POST',
                 headers: {
@@ -180,9 +205,7 @@ class AzureClient {
                     messages: [
                         {
                             role: 'system',
-                            content: 'You are an expert manga OCR and translation engine. ' +
-                                'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
-                                'Return ONLY a valid JSON array. No markdown, no explanations, no extra text.'
+                            content: systemPrompt
                         },
                         {
                             role: 'user',

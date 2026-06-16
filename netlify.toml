@@ -7,6 +7,9 @@ functions = "functions/dist"
 directory = "functions/dist"
 node_bundler = "esbuild"
 
+[functions."process"]
+timeout = 26
+
 [[redirects]]
 from = "/api/*"
 to = "/.netlify/functions/:splat"

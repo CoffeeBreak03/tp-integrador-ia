@@ -23,12 +23,15 @@ const handler = async (event, context) => {
         }
         const azureClient = (0, azure_client_1.getAzureClient)();
         const orchestrator = new orchestrator_1.PipelineOrchestrator(azureClient);
-        const result = await orchestrator.processMangaImage(body.imageBase64);
-        const validated = (0, validate_contract_1.validateTranslationContract)(result);
+        const result = await orchestrator.processMangaImage(body.imageBase64, body.contexto);
+        const validated = (0, validate_contract_1.validateTranslationContract)(result.translations);
         return {
             statusCode: 200,
             headers: { 'Content-Type': 'application/json; charset=utf-8' },
-            body: JSON.stringify(validated),
+            body: JSON.stringify({
+                contexto: result.contexto,
+                translations: validated,
+            }),
         };
     }
     catch (error) {

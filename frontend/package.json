@@ -13,6 +13,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "pdfjs-dist": "^4.0.0",
     "vue": "^3.4.0"
   },
