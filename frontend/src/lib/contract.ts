@@ -39,3 +39,15 @@ export const validateContract = (data: unknown): data is TranslationContract[] =
     );
   });
 };
+
+export interface VisionBox {
+  id: number;
+  y_min: number;
+  x_min: number;
+  y_max: number;
+  x_max: number;
+}
+
+export interface VisionOutput {
+  boxes: VisionBox[];
+}

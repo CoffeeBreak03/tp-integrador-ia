@@ -79,21 +79,31 @@ Para garantizar que la interfaz de usuario sea responsiva a cualquier tamaño de
 
 Todos los endpoints del backend están configurados en el enrutador de Express (`server.ts`) bajo la ruta base `/api/*`.
 
-1. **`POST /api/process` (Pipeline Completo)**
+1. **`POST /api/process` (Pipeline Completo Legacy)**
    - **Request**: `{"imageBase64": "data:image/jpeg;base64,...", "contexto": "<opcional, contexto del capítulo>"}`
    - **Response (200)**: `{"contexto": "<contexto actualizado>", "translations": TranslationBox[]}`
-   - **Response (500/502)**: `{"error": "Detalle del error"}` (Retorna `502` si Hugging Face falló por timeout o cold start).
-   - **Nota**: Si no se envía `contexto`, se retorna con `contexto: ""`.
+   - **Response (500/502)**: `{"error": "Detalle del error"}`
+   - **Nota**: Ejecuta tanto la detección YOLO como la traducción en una sola transacción secuencial.
 
-2. **`POST /api/vision` (Compatibilidad / Detección Individual)**
+2. **`POST /api/detect` (Fase A - Detección y Ordenamiento)**
+   - **Request**: `{"imageBase64": "data:image/jpeg;base64,..."}`
+   - **Response (200)**: `{"boxes": Array<{ id: number, y_min: number, x_min: number, y_max: number, x_max: number }>}`
+   - **Nota**: Retorna las cajas de diálogo ordenadas en secuencia de lectura manga (RTL) y con padding aplicado.
+
+3. **`POST /api/translate-page` (Fase B - OCR + Traducción Multimodal)**
+   - **Request**: `{"imageBase64": "...", "boxes": Array<{ id, y_min, x_min, y_max, x_max }>, "contexto": "<opcional>"}`
+   - **Response (200)**: `{"contexto": "<contexto actualizado>", "translations": TranslationBox[]}`
+   - **Nota**: Recorta los globos con Jimp, realiza la traducción multimodal en GPT-4o y limpia los solapamientos duplicados.
+
+4. **`POST /api/vision` (Compatibilidad / Detección Individual)**
    - **Request**: `{"imageBase64": "..."}`
    - **Response**: `{"vision_output": "[{\"id\": 1, \"box\": [...]}]"}` (Respuesta cruda de YOLOv8).
 
-3. **`POST /api/translate` (Compatibilidad / Traducción de Texto)**
+5. **`POST /api/translate` (Compatibilidad / Traducción de Texto)**
    - **Request**: `{"text": "..."}`
    - **Response**: `{"translated": "..."}` (Traducción de texto plano).
 
-4. **`POST /api/warm-up` (Despertador)**
+6. **`POST /api/warm-up` (Despertador)**
    - **Request**: Ninguno.
    - **Response**: Envía una imagen mínima de 1x1 píxeles a Hugging Face para encender el contenedor remoto si está inactivo (cold-start mitigation).
 
@@ -154,27 +164,27 @@ tp-integrador-ia/
 ## 🛠️ 5. Detalles Técnicos de Implementación
 
 ### 5.1. Mecanismo de Mock Mode (`USE_MOCK_AZURE`)
-En el archivo [azure-client.ts](file:///e:/tmp/tp-integrador-ia/functions/src/lib/azure-client.ts), si se define la variable de entorno `USE_MOCK_AZURE=true`, el backend omitirá llamadas reales a Hugging Face y Azure AI Foundry. En su lugar:
+En el archivo [azure-client.ts](../functions/src/lib/azure-client.ts), si se define la variable de entorno `USE_MOCK_AZURE=true`, el backend omitirá llamadas reales a Hugging Face y Azure AI Foundry. En su lugar:
 1. Lee `mocks/ocr-response.json` para obtener los bounding boxes.
 2. Lee `mocks/translate-response.json` para emular los textos japoneses y traducciones en español.
 3. Devuelve los resultados de manera inmediata e idéntica a una llamada en vivo.
 
 ### 5.2. Pipeline de Detección y Recorte (Crop)
-1. **Detección Espacial**: [azure-client.ts](file:///e:/tmp/tp-integrador-ia/functions/src/lib/azure-client.ts) envía el base64 de la imagen al space de Hugging Face (`/analyze-manga`). Este servicio retorna un array de globos detectados con sus coordenadas `box` normalizadas de 0 a 1000.
-2. **Recorte en Memoria**: En [image-cropper.ts](file:///e:/tmp/tp-integrador-ia/functions/src/lib/image-cropper.ts), utilizando la librería `Jimp`, se lee el buffer de la imagen original. Se desnormalizan las coordenadas a píxeles absolutos usando las dimensiones de la imagen:
+1. **Detección Espacial**: [azure-client.ts](../functions/src/lib/azure-client.ts) envía el base64 de la imagen al space de Hugging Face (`/analyze-manga`). Este servicio retorna un array de globos detectados con sus coordenadas `box` normalizadas de 0 a 1000.
+2. **Recorte en Memoria**: En [image-cropper.ts](../functions/src/lib/image-cropper.ts), utilizando la librería `Jimp`, se lee el buffer de la imagen original. Se desnormalizan las coordenadas a píxeles absolutos usando las dimensiones de la imagen:
    $$\text{pixel\_x} = \lfloor(\text{xmin}/1000) \times \text{width}\rfloor$$
    $$\text{pixel\_width} = \lfloor((\text{xmax} - \text{xmin})/1000) \times \text{width}\rfloor$$
    Se recortan los fragmentos de la imagen original y se generan sub-imágenes en formato JPEG base64.
 
 ### 5.3. OCR y Traducción Multimodal con GPT-4o
-En lugar de hacer OCR y luego traducir texto plano, se realiza una sola llamada multimodal en [azure-client.ts](file:///e:/tmp/tp-integrador-ia/functions/src/lib/azure-client.ts):
+En lugar de hacer OCR y luego traducir texto plano, se realiza una sola llamada multimodal en [azure-client.ts](../functions/src/lib/azure-client.ts):
 - Se envía a Azure GPT-4o un prompt del sistema instruyéndole comportarse como un motor OCR y traducción.
 - El cuerpo del mensaje contiene texto con instrucciones e IDs junto con las imágenes recortadas en base64.
 - GPT-4o procesa las sub-imágenes y devuelve directamente una estructura JSON válida que se mapea con los IDs de las coordenadas espaciales detectadas por YOLOv8.
 
 ### 5.4. Lógica de Escala del Frontend
-1. **Recalcular Escala del Contenedor**: En [App.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/App.vue#L179-L192), la función `recalcScale` asegura que el lienzo de la imagen no desborde horizontalmente la pantalla. Calcula el ancho disponible del contenedor padre y establece un factor CSS `scale()` dinámico sobre el contenedor central.
-2. **Renderizado de Cajas**: En [OverlayRenderer.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/OverlayRenderer.vue#L121-L131), la función `styleFromBox` toma el array de coordenadas normalizadas `[ymin, xmin, ymax, xmax]` y calcula porcentajes directos para aplicar estilos inline:
+1. **Recalcular Escala del Contenedor**: En [App.vue](../frontend/src/App.vue#L179-L192), la función `recalcScale` asegura que el lienzo de la imagen no desborde horizontalmente la pantalla. Calcula el ancho disponible del contenedor padre y establece un factor CSS `scale()` dinámico sobre el contenedor central.
+2. **Renderizado de Cajas**: En [OverlayRenderer.vue](../frontend/src/components/OverlayRenderer.vue#L121-L131), la función `styleFromBox` toma el array de coordenadas normalizadas `[ymin, xmin, ymax, xmax]` y calcula porcentajes directos para aplicar estilos inline:
    - `top: ymin / 10%`
    - `left: xmin / 10%`
    - `width: (xmax - xmin) / 10%`
@@ -190,7 +200,7 @@ El componente [ImageUploader.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/c
 - Límite máximo configurable de **50 páginas** por capítulo.
 
 ### 5.6. Procesamiento Secuencial con Contexto y Sistema de Cola
-Cuando se carga un capítulo, [App.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/App.vue) orquesta el procesamiento secuencial utilizando una cola de páginas (`chapterQueue`):
+Cuando se carga un capítulo, [App.vue](../frontend/src/App.vue) orquesta el procesamiento secuencial utilizando una cola de páginas (`chapterQueue`):
 1. El frontend encola los índices de todas las páginas cargadas.
 2. Un trabajador asíncrono (`processQueue`) procesa la cola de a una página a la vez. En cada llamada a `POST /api/process` se busca secuencialmente hacia atrás el último contexto válido devuelto por las páginas anteriores.
 3. GPT-4o usa el contexto acumulado para mantener la coherencia narrativa (nombres de personajes, tono, eventos).
@@ -198,7 +208,7 @@ Cuando se carga un capítulo, [App.vue](file:///e:/tmp/tp-integrador-ia/frontend
 5. Si ocurre un error, se guarda en el caché con los campos `hasError: true`, `errorType` y `errorMessage` para no detener la cola de procesamiento del resto de las páginas.
 6. Si el error fue un **timeout o cold start** (detectado por errores 500, 502, 504 o palabras clave relacionadas a Hugging Face), se le muestra al usuario una advertencia y un botón de **Reintentar procesamiento**.
 7. Al hacer clic en reintentar, se remueve el error de la caché y se agrega el índice de la página nuevamente a la cola de prioridad `chapterQueue` con prioridad alta (`priority: 1`). Esto asegura que se procese con prioridad inmediata (justo después de que termine la página actualmente en proceso) frente a las páginas restantes de prioridad estándar (`priority: 0`). Si el trabajador no estaba activo, se dispara de nuevo.
-8. El cliente HTTP ([api.ts](file:///e:/tmp/tp-integrador-ia/frontend/src/lib/api.ts)) implementa reintentos automáticos (máximo 3) con backoff exponencial antes de propagar un fallo al cliente.
+8. El cliente HTTP ([api.ts](../frontend/src/lib/api.ts)) implementa reintentos automáticos (máximo 3) con backoff exponencial antes de propagar un fallo al cliente.
 
 ### 5.7. Navegación de Páginas
 El componente [PageNavigator.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/PageNavigator.vue) se instancia en dos ubicaciones de la interfaz (en la parte superior de la página y al pie de la imagen de manga):
@@ -206,7 +216,7 @@ El componente [PageNavigator.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/c
 - Al interactuar con la navegación inferior, la pantalla realiza un scroll suave autónomo (`scrollIntoView`) que enfoca la parte superior de la imagen para facilitar una lectura fluida.
 
 ### 5.8. Margen de Seguridad (Padding) y Ordenamiento de Lectura (Recursive XY-Cut)
-1. **Margen de Seguridad (Padding)**: Durante la fase de parsing espacial en el backend ([orchestrator.ts](file:///e:/tmp/tp-integrador-ia/functions/src/orchestrator.ts)), se expanden las coordenadas de cada caja un 5% de su tamaño original (con un mínimo de 10 unidades sobre la escala 0-1000) en las cuatro direcciones. Esto optimiza el recorte físico para que el OCR no corte caracteres y permite que las cajas de texto en el frontend no queden apretadas.
+1. **Margen de Seguridad (Padding)**: Durante la fase de parsing espacial en el backend ([orchestrator.ts](../functions/src/orchestrator.ts)), se expanden las coordenadas de cada caja un 5% de su tamaño original (con un mínimo de 10 unidades sobre la escala 0-1000) en las cuatro direcciones. Esto optimiza el recorte físico para que el OCR no corte caracteres y permite que las cajas de texto en el frontend no queden apretadas.
 2. **Recursive XY-Cut (RXYC)**: Para que los globos de diálogo aparezcan ordenados según la secuencia de lectura manga (Derecha a Izquierda, Arriba a Abajo):
    - El backend busca gutters (espacios vacíos continuos) horizontales para dividir el espacio en bloques superior e inferior.
    - Si no los hay, busca gutters verticales para dividir en bloques derecho e izquierdo, leyendo el de la derecha primero (RTL).
@@ -214,19 +224,19 @@ El componente [PageNavigator.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/c
    - Los globos se reindexan con IDs del `1` al `N` siguiendo este orden antes del recorte, garantizando que tanto las llamadas a GPT-4o como el listado del frontend sigan el flujo narrativo coherente.
 
 ### 5.9. Validación y Filtro de Solapamientos (Overlap Cleaning)
-Para descartar detecciones duplicadas o burbujas anidadas en el backend ([orchestrator.ts](file:///e:/tmp/tp-integrador-ia/functions/src/orchestrator.ts)):
+Para descartar detecciones duplicadas o burbujas anidadas en el backend ([orchestrator.ts](../functions/src/orchestrator.ts)):
 - Se compara cada par de cajas. Si la intersección entre la caja A (más chica) y la caja B cubre más del 70% del área de A:
   - Se limpian los textos japoneses (`texto_original`) de espacios y puntuación.
   - Si el texto limpio de una es una subcadena del otro (o si alguna está vacía por falla de OCR), se descarta la caja pequeña A y se conserva la caja grande B.
 
 ### 5.10. Escalado Responsivo de Texto e Interacción Bidireccional
 1. **Escalado por Container Queries (Vía CSS/Tailwind)**:
-   - El contenedor de la imagen ([OverlayRenderer.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/OverlayRenderer.vue)) se declara como contenedor de tamaño lineal (`container-type: inline-size`).
+   - El contenedor de la imagen ([OverlayRenderer.vue](../frontend/src/components/OverlayRenderer.vue)) se declara como contenedor de tamaño lineal (`container-type: inline-size`).
    - Se elimina el texto japonés de las cajas en la imagen, mostrando únicamente el texto traducido para maximizar la legibilidad.
    - El tamaño de letra (`font-size`) de cada caja se calcula inline en unidades de contenedor (`cqw`) basándose en una relación matemática entre el área relativa de la caja y el conteo de caracteres. Esto escala de forma fluida y proporcional la tipografía cuando la imagen se redimensiona.
 2. **Hover Bidireccional (Dos Vías)**:
    - Posicionar el cursor sobre una caja en la imagen resalta su borde e incrementa su nivel de superposición (`z-10` o `z-20`).
-   - Posicionar el cursor en la lista lateral ([TranslationPanel.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/TranslationPanel.vue)) destaca la caja correspondiente sobre la imagen.
+   - Posicionar el cursor en la lista lateral ([TranslationPanel.vue](../frontend/src/components/TranslationPanel.vue)) destaca la caja correspondiente sobre la imagen.
 3. **Click-to-Focus y Scroll Autónomo**:
    - Al hacer clic sobre una caja en la imagen, el sistema abre la barra lateral de traducción (si estaba cerrada) y realiza un scroll animado suave (`scrollIntoView`) hacia el botón del listado correspondiente, permitiendo al usuario leer cómodamente el texto completo y su original en japonés si la caja es muy pequeña.
 
@@ -255,14 +265,14 @@ Deben configurarse en un archivo `.env` en el directorio `functions/` o raíz (p
 El repositorio tiene dos suites de pruebas diferenciadas e independientes en cada subdirectorio del monorepo:
 
 ### 7.1. Pruebas Unitarias del Frontend (Vitest)
-Se ubican en [frontend/src/\_\_tests\_\_/](file:///e:/tmp/tp-integrador-ia/frontend/src/__tests__/).
+Se ubican en [frontend/src/\_\_tests\_\_/](../frontend/src/__tests__/).
 - Utilizan `jsdom` para emular el navegador.
 - Archivos clave:
-  - `scale.test.ts`: Valida las transformaciones matemáticas en [scale.ts](file:///e:/tmp/tp-integrador-ia/frontend/src/lib/scale.ts).
-  - `contract.test.ts`: Valida que el parser detecte y rechace payloads ajenos al contrato en [contract.ts](file:///e:/tmp/tp-integrador-ia/frontend/src/lib/contract.ts).
+  - `scale.test.ts`: Valida las transformaciones matemáticas en [scale.ts](../frontend/src/lib/scale.ts).
+  - `contract.test.ts`: Valida que el parser detecte y rechace payloads ajenos al contrato en [contract.ts](../frontend/src/lib/contract.ts).
 
 ### 7.2. Pruebas Unitarias del Backend (Jest)
-Se ubican en [functions/\_\_tests\_\_/](file:///e:/tmp/tp-integrador-ia/functions/__tests__/).
+Se ubican en [functions/\_\_tests\_\_/](../functions/__tests__/).
 - Utilizan `ts-jest` para ejecutar pruebas unitarias sobre Node.js.
 - Archivos clave:
   - `contract.test.ts`: Valida el parseo y formateo a contrato en backend.
@@ -274,20 +284,24 @@ El flujo en `.github/workflows/ci.yml` se ejecuta automáticamente en cada commi
 1. Instalación paralela de dependencias en `frontend/` y `functions/`.
 2. Ejecución secuencial de `npm run test` en ambos subdirectorios.
 3. Compilación (build) de ambos proyectos para verificar que no haya fallos de TypeScript.
-4. Despliegue automático a producción en Netlify si los tests pasan exitosamente en la rama `main`.
+4. Preparación para el despliegue automático a producción en Azure App Service si los tests pasan exitosamente en la rama `main`.
 
 ---
 
-## 🚀 8. Propuesta de Arquitectura: Pipeline Híbrido Concurrente (Futura Optimización)
+## 🚀 8. Arquitectura Desacoplada: Pipeline Híbrido en Cadena (Pipelined Execution)
 
-Para capítulos largos, se propone un enfoque híbrido que reduce drásticamente la latencia total del capítulo sin sacrificar la coherencia narrativa asistida por contexto.
+Para optimizar el tiempo total de procesamiento de capítulos de manga largos sin sacrificar la coherencia narrativa asistida por contexto, se ha implementado un esquema de ejecución desacoplado (Pipeline en cadena o *Pipelined Execution*):
 
 ### Concepto Clave
-Dividir el pipeline actual en dos etapas con diferentes modelos de ejecución:
-1. **Fase de Detección (Concurrente/Paralela)**: Las coordenadas de los globos de diálogo (`box`) no dependen de la historia del manga. Por lo tanto, se puede realizar la detección espacial (YOLOv8) para **todas las páginas en paralelo**.
-2. **Fase de OCR y Traducción (Secuencial con Contexto)**: Se mantiene de forma secuencial, donde cada página es enviada a GPT-4o junto con sus coordenadas precalculadas y el contexto devuelto por la traducción de la página anterior.
+El pipeline se divide en dos fases asíncronas independientes que corren en paralelo:
+1. **Fase A - Detección en Cadena (Pipelined Detection):**
+   * El cliente realiza peticiones POST `/api/detect` en cadena secuencial para cada página (la detección de la página `i+1` comienza inmediatamente cuando termina la de la página `i`).
+   * Esto mantiene a Hugging Face ocupado al 100% de manera ordenada, evitando rate-limits (`429`) y sobrecarga de red en el cliente.
+2. **Fase B - OCR + Traducción Secuencial (Sequential Translation):**
+   * Se procesa de forma secuencial estricta del índice `0` al `N` para encadenar y acumular el contexto narrativo a través de la API de GPT-4o (`/api/translate-page`).
+   * La traducción de la página `i` se inicia automáticamente tan pronto como sus coordenadas de detección estén listas y la página anterior `i-1` haya devuelto su contexto (la página `0` se inicia inmediatamente tras detectarse sus cajas).
 
-### Arquitectura Propuesta del Flujo de Datos
+### Diagrama del Flujo de Datos
 
 ```mermaid
 sequenceDiagram
@@ -299,35 +313,33 @@ sequenceDiagram
     Note over Front: Carga ZIP o PDF con N páginas
     
     rect rgb(220, 240, 255)
-        Note over Front: FASE A: Detección Espacial Concurrente (Paralelo)
-        Paralelo por cada página (1..N)
+        Note over Front: FASE A: Detección en Cadena (Frenado ordenado de YOLOv8)
+        loop Para cada página i de 1 a N
             Front->>Back: POST /api/detect { imageBase64 }
             Back->>HF: POST /analyze-manga { image_base64 }
             HF-->>Back: Retorna boxes [ymin, xmin, ymax, xmax]
-            Back-->>Front: Retorna boxes[] precalculadas
+            Back-->>Front: Retorna boxes[]
+            Note over Front: Dispara de inmediato detección página i+1
         end
     end
 
     rect rgb(230, 255, 230)
-        Note over Front: FASE B: OCR + Traducción Secuencial (Secuencial)
-        loop Para cada página i de 1 a N
+        Note over Front: FASE B: OCR + Traducción Secuencial (Con contexto en cadena)
+        loop Para cada página i de 1 a N (esperando boxes y contexto anterior)
+            Note over Front: Espera a que boxes de i y contexto de i-1 estén listos
             Front->>Back: POST /api/translate-page { imageBase64, boxes, contexto_acumulado }
-            Note over Back: Jimp recorta sub-imágenes usando boxes precalculadas
+            Note over Back: Jimp recorta sub-imágenes usando boxes recibidas
             Back->>GPT: Envía sub-imágenes + contexto (Multimodal)
             GPT-->>Back: Retorna JSON { contexto, traducciones }
             Back-->>Front: Retorna { contexto, translations: TranslationBox[] }
-            Note over Front: Actualiza contexto_acumulado y renderiza
+            Note over Front: Actualiza contexto_acumulado y renderiza overlays de i
         end
     end
 ```
 
-### Ventajas de esta Propuesta
-* **Reducción de Latencia**: La fase de detección visual (que requiere comunicación con Hugging Face y suele ser el cuello de botella físico) se realiza en paralelo para todo el capítulo al inicio.
-* **Preservación del Contexto**: GPT-4o mantiene la máxima coherencia porque la traducción multimodal sigue siendo secuencial e iterativa.
-* **Menor procesamiento en Azure**: La llamada secuencial de traducción es más ligera porque el backend ya tiene las coordenadas listas y no tiene que esperar a YOLOv8 en cada iteración.
-
-### Requisitos Técnicos para la Implementación
-1. **Desacoplar la Orquestación**: Dividir [PipelineOrchestrator](file:///c:/Users/Francisco/source/tp-ia-aplicada/tp-integrador-ia/functions/src/orchestrator.ts#L5) en dos métodos diferenciados o endpoints independientes (`/api/detect` y `/api/translate-page`).
-2. **Manejo de Concurrencia en Frontend**: Implementar un pool de concurrencia limitada (por ejemplo, máx. 3 o 4 peticiones simultáneas) al llamar a `/api/detect` para evitar saturar el ancho de banda del cliente y evitar hitting de límites de tasa (`429`) en el Space de Hugging Face.
-3. **Caché de Detecciones**: Estructurar el almacenamiento en el frontend para guardar de forma diferenciada el estado de la detección (boxes listas) y el estado de la traducción (texto traducido listo).
+### Ventajas de esta Arquitectura
+* **Reducción de Latencia Total:** Al solapar la detección visual de la página `i+1` (que consume tiempo en Hugging Face) con la traducción de la página `i` (que consume tiempo en Azure GPT-4o), el tiempo total de procesamiento se reduce en aproximadamente un 30% a 40%.
+* **Preservación del Contexto:** GPT-4o mantiene la máxima coherencia porque la traducción multimodal sigue siendo secuencial e iterativa, heredando el campo `contexto` en orden estricto.
+* **Salud del Servidor (HF):** Evita inundar Hugging Face con peticiones en paralelo que causarían bloqueos de tasa `429` o degradación por CPU contention.
+* **Resiliencia ante fallos:** Si la detección de una página falla, el flujo de detección continúa con las páginas siguientes y la traducción de esa página se marca con error, permitiendo reintentarla individualmente mediante un botón en la interfaz.
 

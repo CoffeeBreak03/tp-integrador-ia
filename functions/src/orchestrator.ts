@@ -5,6 +5,85 @@ import { TranslationBox, VisionOutput, GptTranslation, PageProcessResult, mergeV
 export class PipelineOrchestrator {
   constructor(private azureClient: AzureClient) { }
 
+  async detectTextBubblesOnly(imageBase64: string): Promise<VisionOutput> {
+    console.log('[ORCHESTRATOR] Starting detectTextBubblesOnly');
+    const visionRaw = await this.azureClient.detectTextBubbles(imageBase64);
+    console.log('[ORCHESTRATOR] Spatial detection raw response:', visionRaw.length, 'bytes');
+
+    if (!visionRaw || visionRaw === '[]') {
+      console.error('[ORCHESTRATOR] ERROR: HF returned empty response');
+      return { boxes: [] };
+    }
+
+    const visionOutput = this.parseVisionOutput(visionRaw);
+    console.log('[ORCHESTRATOR] Spatial output parsed:', visionOutput.boxes.length, 'boxes');
+
+    if (visionOutput.boxes.length === 0) {
+      console.error('[ORCHESTRATOR] ERROR: No boxes extracted from spatial detection');
+      return { boxes: [] };
+    }
+
+    // Ordenar cajas según el orden de lectura manga (Recursive XY-Cut) e indexar de 1 a N
+    console.log('[ORCHESTRATOR] Sorting boxes in manga reading order...');
+    const sortedBoxes = this.sortMangaBoxes(visionOutput.boxes);
+    const reindexedBoxes = sortedBoxes.map((box, index) => ({
+      ...box,
+      id: index + 1
+    }));
+    console.log('[ORCHESTRATOR] Sorted and reindexed boxes in reading order');
+    return { boxes: reindexedBoxes };
+  }
+
+  async translatePageOnly(
+    imageBase64: string,
+    boxes: VisionOutput['boxes'],
+    contexto?: string
+  ): Promise<PageProcessResult> {
+    console.log('[ORCHESTRATOR] Starting translatePageOnly for', boxes.length, 'boxes');
+    if (boxes.length === 0) {
+      return { contexto: contexto || '', translations: [] };
+    }
+
+    // Croppear cada globo usando las coordenadas
+    console.log('[ORCHESTRATOR] Step 3: Cropping individual bubbles...');
+    const croppedBubbles = await cropBubbles(imageBase64, boxes);
+    console.log('[ORCHESTRATOR] Cropped', croppedBubbles.length, 'bubbles');
+
+    if (croppedBubbles.length === 0) {
+      console.error('[ORCHESTRATOR] ERROR: No bubbles could be cropped');
+      return { contexto: contexto || '', translations: [] };
+    }
+
+    // OCR y Traducción con Azure GPT-4o (con contexto)
+    console.log('[ORCHESTRATOR] Step 4: Calling GPT-4o for OCR and translation...');
+    const translatedRaw = await this.azureClient.callOcrAndTranslation(croppedBubbles, contexto);
+    console.log('[ORCHESTRATOR] OCR/Translate raw response length:', translatedRaw.length, 'bytes');
+
+    if (!translatedRaw) {
+      console.error('[ORCHESTRATOR] ERROR: Translation returned empty response');
+      return { contexto: contexto || '', translations: [] };
+    }
+
+    console.log('[ORCHESTRATOR] Step 5: Parsing GPT-4o output...');
+    const { translations: gptTranslations, contexto: updatedContexto } = this.parseOcrAndTranslation(translatedRaw, contexto);
+    console.log('[ORCHESTRATOR] GPT-4o output parsed:', gptTranslations.length, 'items, context:', updatedContexto.length, 'chars');
+
+    if (gptTranslations.length === 0) {
+      console.error('[ORCHESTRATOR] ERROR: No translations parsed from GPT-4o response');
+    }
+
+    // Fusionar coordenadas + textos en la respuesta final
+    console.log('[ORCHESTRATOR] Step 6: Merging results to contract...');
+    const mergedResults = mergeVisionAndTranslation({ boxes }, gptTranslations);
+
+    // Filtrar solapamientos duplicados
+    console.log('[ORCHESTRATOR] Step 7: Filtering overlapping duplicates...');
+    const finalTranslations = this.removeDuplicateOverlaps(mergedResults);
+    console.log('[ORCHESTRATOR] Final translations count:', finalTranslations.length, 'of', mergedResults.length);
+
+    return { contexto: updatedContexto, translations: finalTranslations };
+  }
+
   async processMangaImage(imageBase64: string, contexto?: string): Promise<PageProcessResult> {
     const startTime = Date.now();
     console.log('[ORCHESTRATOR] Starting processMangaImage, input size:', imageBase64.length, 'bytes');
@@ -13,75 +92,14 @@ export class PipelineOrchestrator {
     }
 
     try {
-      // --- Paso A: Detección espacial con Hugging Face (YOLOv8) ---
-      console.log('[ORCHESTRATOR] Step 1: Calling HF space for spatial detection...');
-      const visionRaw = await this.azureClient.detectTextBubbles(imageBase64);
-      console.log('[ORCHESTRATOR] Spatial detection raw response:', visionRaw.length, 'bytes');
-
-      if (!visionRaw || visionRaw === '[]') {
-        console.error('[ORCHESTRATOR] ERROR: HF returned empty response');
-        return { contexto: contexto || '', translations: [] };
-      }
-
-      console.log('[ORCHESTRATOR] Step 2: Parsing spatial output...');
-      const visionOutput = this.parseVisionOutput(visionRaw);
-      console.log('[ORCHESTRATOR] Spatial output parsed:', visionOutput.boxes.length, 'boxes');
-
+      const visionOutput = await this.detectTextBubblesOnly(imageBase64);
       if (visionOutput.boxes.length === 0) {
-        console.error('[ORCHESTRATOR] ERROR: No boxes extracted from spatial detection');
         return { contexto: contexto || '', translations: [] };
       }
-
-      // Ordenar cajas según el orden de lectura manga (Recursive XY-Cut) e indexar de 1 a N
-      console.log('[ORCHESTRATOR] Sorting boxes in manga reading order...');
-      const sortedBoxes = this.sortMangaBoxes(visionOutput.boxes);
-      const reindexedBoxes = sortedBoxes.map((box, index) => ({
-        ...box,
-        id: index + 1
-      }));
-      visionOutput.boxes = reindexedBoxes;
-      console.log('[ORCHESTRATOR] Sorted and reindexed boxes in reading order');
-
-      // --- Paso B: Croppear cada globo usando las coordenadas ---
-      console.log('[ORCHESTRATOR] Step 3: Cropping individual bubbles...');
-      const croppedBubbles = await cropBubbles(imageBase64, visionOutput.boxes);
-      console.log('[ORCHESTRATOR] Cropped', croppedBubbles.length, 'bubbles');
-
-      if (croppedBubbles.length === 0) {
-        console.error('[ORCHESTRATOR] ERROR: No bubbles could be cropped');
-        return { contexto: contexto || '', translations: [] };
-      }
-
-      // --- Paso C: OCR y Traducción con Azure GPT-4o (con contexto) ---
-      console.log('[ORCHESTRATOR] Step 4: Calling GPT-4o for OCR and translation...');
-      const translatedRaw = await this.azureClient.callOcrAndTranslation(croppedBubbles, contexto);
-      console.log('[ORCHESTRATOR] OCR/Translate raw response length:', translatedRaw.length, 'bytes');
-
-      if (!translatedRaw) {
-        console.error('[ORCHESTRATOR] ERROR: Translation returned empty response');
-        return { contexto: contexto || '', translations: [] };
-      }
-
-      console.log('[ORCHESTRATOR] Step 5: Parsing GPT-4o output...');
-      const { translations: gptTranslations, contexto: updatedContexto } = this.parseOcrAndTranslation(translatedRaw, contexto);
-      console.log('[ORCHESTRATOR] GPT-4o output parsed:', gptTranslations.length, 'items, context:', updatedContexto.length, 'chars');
-
-      if (gptTranslations.length === 0) {
-        console.error('[ORCHESTRATOR] ERROR: No translations parsed from GPT-4o response');
-      }
-
-      // --- Paso D: Fusionar coordenadas + textos en la respuesta final ---
-      console.log('[ORCHESTRATOR] Step 6: Merging results to contract...');
-      const mergedResults = mergeVisionAndTranslation(visionOutput, gptTranslations);
-
-      // Filtrar solapamientos duplicados
-      console.log('[ORCHESTRATOR] Step 7: Filtering overlapping duplicates...');
-      const finalTranslations = this.removeDuplicateOverlaps(mergedResults);
-      console.log('[ORCHESTRATOR] Final translations count:', finalTranslations.length, 'of', mergedResults.length);
-
+      const result = await this.translatePageOnly(imageBase64, visionOutput.boxes, contexto);
       const totalTime = Date.now() - startTime;
       console.log('[ORCHESTRATOR] Complete in', totalTime, 'ms');
-      return { contexto: updatedContexto, translations: finalTranslations };
+      return result;
     } catch (error) {
       const totalTime = Date.now() - startTime;
       console.error('[ORCHESTRATOR] FATAL ERROR after', totalTime, 'ms:', error instanceof Error ? error.message : error);

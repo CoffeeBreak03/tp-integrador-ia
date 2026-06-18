@@ -11,6 +11,8 @@ import { processPage } from './process';
 import { warmUp } from './warm-up';
 import { translateText } from './translate';
 import { detectVision } from './vision';
+import { detectPage } from './detect';
+import { translatePage } from './translate-page';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -22,6 +24,8 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Routes
 app.post('/api/process', processPage);
+app.post('/api/detect', detectPage);
+app.post('/api/translate-page', translatePage);
 app.post('/api/warm-up', warmUp);
 app.post('/api/translate', translateText);
 app.post('/api/vision', detectVision);

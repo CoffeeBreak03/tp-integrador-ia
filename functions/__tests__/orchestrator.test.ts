@@ -183,4 +183,55 @@ describe('Pipeline orchestrator', () => {
         expect(result.translations).toHaveLength(1);
         expect(result.translations[0].texto_original).toBe('こんにちは、世界');
     });
+
+    it('detectTextBubblesOnly calls detectTextBubbles, sorts, and reindexes boxes', async () => {
+        const mockAzure = {
+            detectTextBubbles: jest.fn().mockResolvedValue(
+                JSON.stringify([
+                    { id: 10, box: [200, 500, 300, 800] }, // right
+                    { id: 20, box: [50, 100, 150, 400] },  // left
+                ])
+            ),
+        } as any;
+
+        const orchestrator = new PipelineOrchestrator(mockAzure);
+        const result = await orchestrator.detectTextBubblesOnly('base64...');
+
+        expect(mockAzure.detectTextBubbles).toHaveBeenCalledWith('base64...');
+        expect(result.boxes).toHaveLength(2);
+        // Sorted RTL: right first (now id 1), left second (now id 2)
+        expect(result.boxes[0].id).toBe(1);
+        expect(result.boxes[1].id).toBe(2);
+    });
+
+    it('translatePageOnly calls callOcrAndTranslation and merges/cleans overlaps', async () => {
+        const mockAzure = {
+            callOcrAndTranslation: jest.fn().mockResolvedValue(
+                JSON.stringify({
+                    contexto: 'New context',
+                    traducciones: [
+                        { id: 1, texto_japones: 'こんにちは', traduccion_espanol: 'Hola' },
+                        { id: 2, texto_japones: 'こんにちは、世界', traduccion_espanol: 'Hola, mundo' },
+                    ]
+                })
+            ),
+        } as any;
+
+        const orchestrator = new PipelineOrchestrator(mockAzure);
+        const boxes = [
+            { id: 1, y_min: 110, x_min: 110, y_max: 210, x_max: 310 }, // Small box inside large box (overlap > 70%)
+            { id: 2, y_min: 90, x_min: 85, y_max: 310, x_max: 415 },  // Large box
+        ];
+        const result = await orchestrator.translatePageOnly('base64...', boxes, 'Old context');
+
+        expect(mockAzure.callOcrAndTranslation).toHaveBeenCalledWith(
+            expect.any(Array),
+            'Old context'
+        );
+        expect(result.contexto).toBe('New context');
+        // Overlap cleaner should remove ID 1 and keep ID 2
+        expect(result.translations).toHaveLength(1);
+        expect(result.translations[0].id).toBe(2);
+        expect(result.translations[0].texto_original).toBe('こんにちは、世界');
+    });
 });

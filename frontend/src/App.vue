@@ -214,8 +214,8 @@ import ImageUploader from '@/components/ImageUploader.vue';
 import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
 import PageNavigator from '@/components/PageNavigator.vue';
-import { TranslationContract } from '@/lib/contract';
-import { processPage } from '@/lib/api';
+import { TranslationContract, VisionBox } from '@/lib/contract';
+import { processPage, detectPage, translatePageWithBoxes } from '@/lib/api';
 
 // --- Refs del DOM ---
 const imageUploader = ref<{ openExplorer: () => void } | null>(null);
@@ -254,6 +254,9 @@ let chapterProcessingAborted = false;
 interface CachedPage {
   translations: TranslationContract[];
   contexto: string;
+  boxes?: VisionBox[];
+  detectionStatus: 'idle' | 'loading' | 'success' | 'error';
+  translationStatus: 'idle' | 'loading' | 'success' | 'error';
   hasError?: boolean;
   errorType?: 'timeout' | 'other';
   errorMessage?: string;
@@ -287,16 +290,18 @@ const currentTranslations = computed(() => {
 const isCurrentPageLoading = computed(() => {
   if (isChapterMode.value) {
     const idx = currentPageIndex.value;
-    return pagesInProcess.value.has(idx) || (!pageCache.value.has(idx) && isProcessingChapter.value);
+    const cached = pageCache.value.get(idx);
+    if (!cached) return false;
+    return cached.detectionStatus === 'loading' || cached.translationStatus === 'loading';
   }
   return isLoading.value;
 });
 
 const processedPagesCount = computed(() => {
-  // Solo contar páginas que terminaron con éxito (no tienen error)
+  // Solo contar páginas que terminaron con éxito (no tienen error y tienen traducción exitosa)
   let count = 0;
   for (const page of pageCache.value.values()) {
-    if (!page.hasError) count++;
+    if (page.translationStatus === 'success' && !page.hasError) count++;
   }
   return count;
 });
@@ -370,15 +375,19 @@ const handleSingleImage = async (imageDataUrl: string) => {
 };
 
 // --- Procesamiento de capítulo (multi-página) ---
+const isDetectingChapter = ref(false);
+const isTranslatingChapter = ref(false);
+
 const resetChapter = () => {
   chapterProcessingAborted = true;
   chapterPages.value = [];
-  chapterQueue.value = [];
   currentPageIndex.value = 0;
   chapterContext.value = '';
   pageCache.value = new Map();
   pagesInProcess.value = new Set();
   isProcessingChapter.value = false;
+  isDetectingChapter.value = false;
+  isTranslatingChapter.value = false;
 };
 
 const handleChapterLoaded = async (pages: string[]) => {
@@ -394,129 +403,215 @@ const handleChapterLoaded = async (pages: string[]) => {
   chapterPages.value = pages;
   currentPageIndex.value = 0;
 
-  // Encolar todas las páginas con prioridad 0
-  chapterQueue.value = Array.from({ length: pages.length }, (_, i) => ({ index: i, priority: 0 }));
+  // Inicializar caché con estados idle
+  for (let i = 0; i < pages.length; i++) {
+    pageCache.value.set(i, {
+      translations: [],
+      contexto: '',
+      boxes: [],
+      detectionStatus: 'idle',
+      translationStatus: 'idle',
+    });
+  }
+
+  isProcessingChapter.value = true;
 
   await nextTick();
   recalcScale();
 
-  // Iniciar procesamiento en cola
-  processQueue();
+  // Iniciar el pipeline en cadena
+  runDetectionChain();
+  runTranslationChain();
 };
 
-const processQueue = async () => {
-  if (isProcessingChapter.value) return;
-  isProcessingChapter.value = true;
+const runDetectionChain = async () => {
+  if (isDetectingChapter.value) return;
+  isDetectingChapter.value = true;
+  updateProcessingStatus();
 
-  while (chapterQueue.value.length > 0 && !chapterProcessingAborted) {
-    const item = chapterQueue.value[0];
-    const i = item.index;
+  try {
+    for (let i = 0; i < chapterPages.value.length; i++) {
+      if (chapterProcessingAborted) break;
 
-    // Si ya está en caché con éxito y no está en proceso, la sacamos de la cola
-    const cached = pageCache.value.get(i);
-    if (cached && !cached.hasError && !pagesInProcess.value.has(i)) {
-      chapterQueue.value.shift();
-      continue;
+      const cached = pageCache.value.get(i);
+      if (!cached) continue;
+
+      // Si ya se detectó exitosamente, saltar
+      if (cached.detectionStatus === 'success') {
+        continue;
+      }
+
+      cached.detectionStatus = 'loading';
+
+      try {
+        console.log('[PIPELINE] Detecting page', i + 1);
+        const result = await detectPage(chapterPages.value[i]);
+        if (chapterProcessingAborted) break;
+
+        cached.boxes = result.boxes;
+        cached.detectionStatus = 'success';
+        console.log('[PIPELINE] Page', i + 1, 'detection complete, boxes:', result.boxes.length);
+
+        // Intentar disparar el loop de traducción, ya que ahora esta página tiene cajas
+        triggerTranslationStep();
+      } catch (error) {
+        console.error('[PIPELINE] Error detecting page', i + 1, ':', error);
+        if (chapterProcessingAborted) break;
+
+        const msg = error instanceof Error ? error.message : String(error);
+        const isTimeout = /502|504|timeout|limit/i.test(msg);
+
+        cached.detectionStatus = 'error';
+        cached.hasError = true;
+        cached.errorType = isTimeout ? 'timeout' : 'other';
+        cached.errorMessage = msg;
+
+        if (i === currentPageIndex.value) {
+          errorMessage.value = msg;
+        }
+
+        // Aunque falle la detección, dejamos que la cadena continúe con las otras páginas
+      }
     }
+  } finally {
+    isDetectingChapter.value = false;
+    updateProcessingStatus();
+  }
+};
 
-    pagesInProcess.value.add(i);
-    chapterQueue.value.shift();
+const runTranslationChain = async () => {
+  if (isTranslatingChapter.value) return;
+  isTranslatingChapter.value = true;
+  updateProcessingStatus();
 
-    try {
-      console.log('[CHAPTER] Processing page', i + 1, '/', chapterPages.value.length, 'priority:', item.priority);
-      
+  try {
+    for (let i = 0; i < chapterPages.value.length; i++) {
+      if (chapterProcessingAborted) break;
+
+      const cached = pageCache.value.get(i);
+      if (!cached) continue;
+
+      // Si ya está traducido, pasar
+      if (cached.translationStatus === 'success') {
+        continue;
+      }
+
+      // Si falló y no estamos reintentándolo, rompemos el loop secuencial de traducción
+      // porque dependemos del contexto acumulativo en orden estricto (0..N).
+      if (cached.translationStatus === 'error') {
+        break;
+      }
+
+      // Condición de sincronización: Las cajas de detección deben estar listas
+      if (cached.detectionStatus !== 'success') {
+        // Rompemos el loop de traducción secuencial aquí.
+        // Se reanudará cuando triggerTranslationStep sea llamado tras completarse la detección de esta página.
+        break;
+      }
+
       // Obtener el último contexto válido buscando hacia atrás
       let prevContext = '';
-      for (let prev = i - 1; prev >= 0; prev--) {
-        const p = pageCache.value.get(prev);
-        if (p && p.contexto) {
-          prevContext = p.contexto;
-          break;
+      if (i > 0) {
+        const prevPage = pageCache.value.get(i - 1);
+        if (!prevPage || prevPage.translationStatus !== 'success') {
+          // Si la página anterior falló, buscamos hacia atrás el último contexto exitoso
+          for (let prev = i - 1; prev >= 0; prev--) {
+            const p = pageCache.value.get(prev);
+            if (p && p.translationStatus === 'success' && p.contexto) {
+              prevContext = p.contexto;
+              break;
+            }
+          }
+        } else {
+          prevContext = prevPage.contexto;
         }
       }
 
-      const result = await processPage(
-        chapterPages.value[i],
-        prevContext || undefined
-      );
+      cached.translationStatus = 'loading';
 
-      // Si se abortó mientras procesaba, no cachear
-      if (chapterProcessingAborted) break;
+      try {
+        console.log('[PIPELINE] Translating page', i + 1, 'with context length:', prevContext.length);
+        const result = await translatePageWithBoxes(
+          chapterPages.value[i],
+          cached.boxes || [],
+          prevContext || undefined
+        );
 
-      // Cachear resultado
-      pageCache.value.set(i, {
-        translations: result.translations,
-        contexto: result.contexto,
-      });
+        if (chapterProcessingAborted) break;
 
-      // Si es la página actual, limpiar el error si tuviera
-      if (i === currentPageIndex.value) {
-        errorMessage.value = null;
+        cached.translations = result.translations;
+        cached.contexto = result.contexto;
+        cached.translationStatus = 'success';
+        cached.hasError = false;
+        cached.errorMessage = undefined;
+
+        if (i === currentPageIndex.value) {
+          errorMessage.value = null;
+        }
+        console.log('[PIPELINE] Page', i + 1, 'translation complete, translations:', result.translations.length);
+      } catch (error) {
+        console.error('[PIPELINE] Error translating page', i + 1, ':', error);
+        if (chapterProcessingAborted) break;
+
+        const msg = error instanceof Error ? error.message : String(error);
+        const isTimeout = /502|504|timeout|limit/i.test(msg);
+
+        cached.translationStatus = 'error';
+        cached.hasError = true;
+        cached.errorType = isTimeout ? 'timeout' : 'other';
+        cached.errorMessage = msg;
+
+        if (i === currentPageIndex.value) {
+          errorMessage.value = msg;
+        }
+
+        // Si falla la traducción, rompemos el flujo secuencial de traducción de las páginas siguientes
+        // para dar oportunidad de reintentar en orden.
+        break;
       }
-
-      console.log('[CHAPTER] Page', i + 1, 'complete:', result.translations.length, 'boxes');
-    } catch (error) {
-      console.error('[CHAPTER] Error processing page', i + 1, ':', error);
-
-      if (chapterProcessingAborted) break;
-
-      const msg = error instanceof Error ? error.message : String(error);
-      const isTimeout = /502|504|timeout|limit/i.test(msg);
-
-      // Cachear una entrada de error
-      pageCache.value.set(i, {
-        translations: [],
-        contexto: i > 0 ? (pageCache.value.get(i - 1)?.contexto || '') : '',
-        hasError: true,
-        errorType: isTimeout ? 'timeout' : 'other',
-        errorMessage: msg,
-      });
-
-      // Mostrar error solo si es la página actual
-      if (i === currentPageIndex.value) {
-        errorMessage.value = msg;
-      }
-    } finally {
-      pagesInProcess.value.delete(i);
     }
+  } finally {
+    isTranslatingChapter.value = false;
+    updateProcessingStatus();
   }
+};
 
-  isProcessingChapter.value = false;
+const triggerTranslationStep = () => {
+  if (!chapterProcessingAborted) {
+    runTranslationChain();
+  }
+};
+
+const updateProcessingStatus = () => {
+  isProcessingChapter.value = isDetectingChapter.value || isTranslatingChapter.value;
 };
 
 const handleRetry = async () => {
   if (isChapterMode.value) {
     const idx = currentPageIndex.value;
-    console.log('[RETRY] Retrying page', idx + 1, 'with high priority');
+    console.log('[RETRY] Retrying page', idx + 1);
 
-    // 1. Limpiar de la caché
-    pageCache.value.delete(idx);
+    const cached = pageCache.value.get(idx);
+    if (!cached) return;
 
-    // 2. Limpiar el error actual
     errorMessage.value = null;
 
-    // 3. Encolar con prioridad alta (1) si no está ya, o actualizar si está
-    const existingIndex = chapterQueue.value.findIndex(item => item.index === idx);
-    if (existingIndex === -1) {
-      chapterQueue.value.push({ index: idx, priority: 1 });
+    // Si falló la detección (o no hay cajas precalculadas)
+    if (cached.detectionStatus === 'error' || !cached.boxes || cached.boxes.length === 0) {
+      cached.detectionStatus = 'idle';
+      cached.translationStatus = 'idle';
+      cached.hasError = false;
+      isProcessingChapter.value = true;
+      runDetectionChain();
+      runTranslationChain();
     } else {
-      chapterQueue.value[existingIndex].priority = 1;
-    }
-
-    // Ordenar la cola: primero prioridad desc, luego index asc
-    chapterQueue.value.sort((a, b) => {
-      if (b.priority !== a.priority) {
-        return b.priority - a.priority;
-      }
-      return a.index - b.index;
-    });
-
-    // 4. Iniciar procesamiento si no está corriendo
-    if (!isProcessingChapter.value) {
-      processQueue();
+      // Si la detección fue exitosa pero falló la traducción
+      cached.translationStatus = 'idle';
+      cached.hasError = false;
+      isProcessingChapter.value = true;
+      runTranslationChain();
     }
   } else {
-    // Modo individual
     handleSingleImage(singleImageData.value);
   }
 };

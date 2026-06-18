@@ -1,4 +1,4 @@
-import { validateContract, type TranslationContract, type ProcessPageResponse } from './contract';
+import { validateContract, type TranslationContract, type ProcessPageResponse, type VisionOutput, type VisionBox } from './contract';
 
 export interface ProcessImageRequest {
   imageBase64: string;
@@ -133,4 +133,104 @@ export async function processPage(
 export async function processImage(imageBase64: string): Promise<TranslationContract[] | null> {
   const result = await processPage(imageBase64);
   return result.translations;
+}
+
+/**
+ * Envía una imagen al backend para detectar los globos de diálogo (YOLOv8).
+ * Retorna las coordenadas de las cajas detectadas y ordenadas.
+ */
+export async function detectPage(
+  imageBase64: string
+): Promise<VisionOutput> {
+  const controller = new AbortController();
+  // 120 second timeout for HF Space cold start
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+  try {
+    const response = await fetchWithRetry(
+      '/api/detect',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageBase64 }),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error((errorData as any).error || `Error ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data && Array.isArray((data as any).boxes)) {
+      return data as VisionOutput;
+    }
+    throw new Error('Respuesta de detección inválida');
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.error('Error al detectar globos:', error);
+    throw error;
+  }
+}
+
+/**
+ * Envía la imagen y las cajas detectadas para realizar el OCR y la traducción.
+ * Retorna la respuesta con traducciones y el contexto actualizado.
+ */
+export async function translatePageWithBoxes(
+  imageBase64: string,
+  boxes: VisionBox[],
+  contexto?: string
+): Promise<ProcessPageResponse> {
+  const controller = new AbortController();
+  // 120 second timeout for GPT-4o
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+  try {
+    const response = await fetchWithRetry(
+      '/api/translate-page',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageBase64,
+          boxes,
+          contexto: contexto || undefined,
+        }),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error((errorData as any).error || `Error ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data && typeof data === 'object' && 'translations' in data) {
+      const translations = data.translations;
+      if (!validateContract(translations)) {
+        throw new Error('Las traducciones no cumplen el contrato esperado');
+      }
+      return {
+        contexto: typeof data.contexto === 'string' ? data.contexto : '',
+        translations,
+      };
+    }
+    throw new Error('Respuesta de traducción inválida');
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.error('Error al traducir página con cajas:', error);
+    throw error;
+  }
 }
