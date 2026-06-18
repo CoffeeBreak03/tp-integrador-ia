@@ -33,6 +33,7 @@
             <div
               v-for="item in translations"
               :key="item.id"
+              :id="'translation-box-' + item.id"
               :style="{
                 ...styleFromBox(item.box),
                 fontSize: getBoxFontSize(item.box, item.texto_traducido)

@@ -671,6 +671,12 @@ onUnmounted(() => {
 // --- Handlers de UI ---
 const highlightItem = (item: TranslationContract) => {
   selectedItemId.value = item.id;
+  nextTick(() => {
+    const el = document.getElementById(`translation-box-${item.id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
 };
 
 const handleHoverItem = (id: number | undefined) => {
