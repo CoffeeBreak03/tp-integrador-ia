@@ -40,6 +40,11 @@ export const validateContract = (data: unknown): data is TranslationContract[] =
   });
 };
 
+export interface CroppedBubble {
+  id: number;
+  base64: string;
+}
+
 export interface VisionBox {
   id: number;
   y_min: number;
@@ -50,4 +55,5 @@ export interface VisionBox {
 
 export interface VisionOutput {
   boxes: VisionBox[];
+  croppedBubbles?: CroppedBubble[];
 }

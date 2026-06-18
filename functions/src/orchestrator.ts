@@ -31,26 +31,22 @@ export class PipelineOrchestrator {
       id: index + 1
     }));
     console.log('[ORCHESTRATOR] Sorted and reindexed boxes in reading order');
-    return { boxes: reindexedBoxes };
+
+    // Croppear cada globo usando las coordenadas en la fase de detección
+    console.log('[ORCHESTRATOR] Step 2.5: Cropping individual bubbles...');
+    const croppedBubbles = await cropBubbles(imageBase64, reindexedBoxes);
+    console.log('[ORCHESTRATOR] Cropped', croppedBubbles.length, 'bubbles');
+
+    return { boxes: reindexedBoxes, croppedBubbles };
   }
 
   async translatePageOnly(
-    imageBase64: string,
+    croppedBubbles: Array<{ id: number; base64: string }>,
     boxes: VisionOutput['boxes'],
     contexto?: string
   ): Promise<PageProcessResult> {
     console.log('[ORCHESTRATOR] Starting translatePageOnly for', boxes.length, 'boxes');
-    if (boxes.length === 0) {
-      return { contexto: contexto || '', translations: [] };
-    }
-
-    // Croppear cada globo usando las coordenadas
-    console.log('[ORCHESTRATOR] Step 3: Cropping individual bubbles...');
-    const croppedBubbles = await cropBubbles(imageBase64, boxes);
-    console.log('[ORCHESTRATOR] Cropped', croppedBubbles.length, 'bubbles');
-
-    if (croppedBubbles.length === 0) {
-      console.error('[ORCHESTRATOR] ERROR: No bubbles could be cropped');
+    if (boxes.length === 0 || croppedBubbles.length === 0) {
       return { contexto: contexto || '', translations: [] };
     }
 
@@ -96,7 +92,7 @@ export class PipelineOrchestrator {
       if (visionOutput.boxes.length === 0) {
         return { contexto: contexto || '', translations: [] };
       }
-      const result = await this.translatePageOnly(imageBase64, visionOutput.boxes, contexto);
+      const result = await this.translatePageOnly(visionOutput.croppedBubbles || [], visionOutput.boxes, contexto);
       const totalTime = Date.now() - startTime;
       console.log('[ORCHESTRATOR] Complete in', totalTime, 'ms');
       return result;

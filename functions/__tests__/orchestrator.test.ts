@@ -222,10 +222,14 @@ describe('Pipeline orchestrator', () => {
             { id: 1, y_min: 110, x_min: 110, y_max: 210, x_max: 310 }, // Small box inside large box (overlap > 70%)
             { id: 2, y_min: 90, x_min: 85, y_max: 310, x_max: 415 },  // Large box
         ];
-        const result = await orchestrator.translatePageOnly('base64...', boxes, 'Old context');
+        const croppedBubbles = [
+            { id: 1, base64: 'cropped_1' },
+            { id: 2, base64: 'cropped_2' }
+        ];
+        const result = await orchestrator.translatePageOnly(croppedBubbles, boxes, 'Old context');
 
         expect(mockAzure.callOcrAndTranslation).toHaveBeenCalledWith(
-            expect.any(Array),
+            croppedBubbles,
             'Old context'
         );
         expect(result.contexto).toBe('New context');

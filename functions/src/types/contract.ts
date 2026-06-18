@@ -8,6 +8,11 @@ export interface TranslationBox {
   texto_traducido: string;
 }
 
+export interface CroppedBubble {
+  id: number;
+  base64: string;
+}
+
 export interface VisionOutput {
   boxes: Array<{
     id: number;
@@ -16,6 +21,7 @@ export interface VisionOutput {
     y_max: number;
     x_max: number;
   }>;
+  croppedBubbles?: CroppedBubble[];
 }
 
 /**

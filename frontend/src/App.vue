@@ -255,6 +255,7 @@ interface CachedPage {
   translations: TranslationContract[];
   contexto: string;
   boxes?: VisionBox[];
+  croppedBubbles?: Array<{ id: number; base64: string }>;
   detectionStatus: 'idle' | 'loading' | 'success' | 'error';
   translationStatus: 'idle' | 'loading' | 'success' | 'error';
   hasError?: boolean;
@@ -409,6 +410,7 @@ const handleChapterLoaded = async (pages: string[]) => {
       translations: [],
       contexto: '',
       boxes: [],
+      croppedBubbles: [],
       detectionStatus: 'idle',
       translationStatus: 'idle',
     });
@@ -449,6 +451,7 @@ const runDetectionChain = async () => {
         if (chapterProcessingAborted) break;
 
         cached.boxes = result.boxes;
+        cached.croppedBubbles = result.croppedBubbles;
         cached.detectionStatus = 'success';
         console.log('[PIPELINE] Page', i + 1, 'detection complete, boxes:', result.boxes.length);
 
@@ -496,10 +499,10 @@ const runTranslationChain = async () => {
         continue;
       }
 
-      // Si falló y no estamos reintentándolo, rompemos el loop secuencial de traducción
-      // porque dependemos del contexto acumulativo en orden estricto (0..N).
+      // Si falló y no estamos reintentándolo, pasamos a la siguiente página (continue)
+      // para que el proceso no se corte.
       if (cached.translationStatus === 'error') {
-        break;
+        continue;
       }
 
       // Condición de sincronización: Las cajas de detección deben estar listas
@@ -532,7 +535,7 @@ const runTranslationChain = async () => {
       try {
         console.log('[PIPELINE] Translating page', i + 1, 'with context length:', prevContext.length);
         const result = await translatePageWithBoxes(
-          chapterPages.value[i],
+          cached.croppedBubbles || [],
           cached.boxes || [],
           prevContext || undefined
         );
@@ -565,9 +568,9 @@ const runTranslationChain = async () => {
           errorMessage.value = msg;
         }
 
-        // Si falla la traducción, rompemos el flujo secuencial de traducción de las páginas siguientes
-        // para dar oportunidad de reintentar en orden.
-        break;
+        // Si falla la traducción, no detenemos la cola; permitimos que las siguientes continúen
+        // usando el último contexto exitoso encontrado.
+        continue;
       }
     }
   } finally {

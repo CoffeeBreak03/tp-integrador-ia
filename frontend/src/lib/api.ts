@@ -1,4 +1,4 @@
-import { validateContract, type TranslationContract, type ProcessPageResponse, type VisionOutput, type VisionBox } from './contract';
+import { validateContract, type TranslationContract, type ProcessPageResponse, type VisionOutput, type VisionBox, type CroppedBubble } from './contract';
 
 export interface ProcessImageRequest {
   imageBase64: string;
@@ -183,7 +183,7 @@ export async function detectPage(
  * Retorna la respuesta con traducciones y el contexto actualizado.
  */
 export async function translatePageWithBoxes(
-  imageBase64: string,
+  croppedBubbles: CroppedBubble[],
   boxes: VisionBox[],
   contexto?: string
 ): Promise<ProcessPageResponse> {
@@ -200,7 +200,7 @@ export async function translatePageWithBoxes(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageBase64,
+          croppedBubbles,
           boxes,
           contexto: contexto || undefined,
         }),

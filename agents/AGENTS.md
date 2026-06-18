@@ -85,15 +85,15 @@ Todos los endpoints del backend están configurados en el enrutador de Express (
    - **Response (500/502)**: `{"error": "Detalle del error"}`
    - **Nota**: Ejecuta tanto la detección YOLO como la traducción en una sola transacción secuencial.
 
-2. **`POST /api/detect` (Fase A - Detección y Ordenamiento)**
+2. **`POST /api/detect` (Fase A - Detección, Ordenamiento y Recorte)**
    - **Request**: `{"imageBase64": "data:image/jpeg;base64,..."}`
-   - **Response (200)**: `{"boxes": Array<{ id: number, y_min: number, x_min: number, y_max: number, x_max: number }>}`
-   - **Nota**: Retorna las cajas de diálogo ordenadas en secuencia de lectura manga (RTL) y con padding aplicado.
+   - **Response (200)**: `{"boxes": Array<{ id: number, y_min: number, x_min: number, y_max: number, x_max: number }>, "croppedBubbles": Array<{ id: number, base64: string }>}`
+   - **Nota**: Retorna las cajas de diálogo ordenadas en secuencia de lectura manga (RTL) y con padding aplicado, junto con las sub-imágenes recortadas en base64 de cada globo.
 
 3. **`POST /api/translate-page` (Fase B - OCR + Traducción Multimodal)**
-   - **Request**: `{"imageBase64": "...", "boxes": Array<{ id, y_min, x_min, y_max, x_max }>, "contexto": "<opcional>"}`
+   - **Request**: `{"croppedBubbles": Array<{ id: number, base64: string }>, "boxes": Array<{ id, y_min, x_min, y_max, x_max }>, "contexto": "<opcional>"}`
    - **Response (200)**: `{"contexto": "<contexto actualizado>", "translations": TranslationBox[]}`
-   - **Nota**: Recorta los globos con Jimp, realiza la traducción multimodal en GPT-4o y limpia los solapamientos duplicados.
+   - **Nota**: Realiza la traducción multimodal en GPT-4o usando las sub-imágenes ya recortadas y limpia los solapamientos duplicados.
 
 4. **`POST /api/vision` (Compatibilidad / Detección Individual)**
    - **Request**: `{"imageBase64": "..."}`
@@ -294,12 +294,15 @@ Para optimizar el tiempo total de procesamiento de capítulos de manga largos si
 
 ### Concepto Clave
 El pipeline se divide en dos fases asíncronas independientes que corren en paralelo:
-1. **Fase A - Detección en Cadena (Pipelined Detection):**
+1. **Fase A - Detección en Cadena (Pipelined Detection & Cropping):**
    * El cliente realiza peticiones POST `/api/detect` en cadena secuencial para cada página (la detección de la página `i+1` comienza inmediatamente cuando termina la de la página `i`).
-   * Esto mantiene a Hugging Face ocupado al 100% de manera ordenada, evitando rate-limits (`429`) y sobrecarga de red en el cliente.
+   * El backend llama a Hugging Face para obtener las cajas, las ordena y, de inmediato, realiza el **recorte físico (cropping)** usando `Jimp`.
+   * El backend retorna tanto las cajas (`boxes`) como las sub-imágenes recortadas (`croppedBubbles`) codificadas en base64. El cliente las almacena temporalmente en su caché.
+   * Esto mantiene a Hugging Face ocupado al 100% de manera ordenada, evitando rate-limits (`429`) y sobrecarga de red en el cliente, mientras realiza el procesamiento pesado de imágenes en segundo plano.
 2. **Fase B - OCR + Traducción Secuencial (Sequential Translation):**
-   * Se procesa de forma secuencial estricta del índice `0` al `N` para encadenar y acumular el contexto narrativo a través de la API de GPT-4o (`/api/translate-page`).
-   * La traducción de la página `i` se inicia automáticamente tan pronto como sus coordenadas de detección estén listas y la página anterior `i-1` haya devuelto su contexto (la página `0` se inicia inmediatamente tras detectarse sus cajas).
+   * Se procesa de forma secuencial del índice `0` al `N` para encadenar y acumular el contexto narrativo a través de la API de GPT-4o (`/api/translate-page`).
+   * La traducción de la página `i` se inicia automáticamente tan pronto como sus coordenadas de detección y burbujas recortadas estén listas y la página anterior `i-1` haya devuelto su contexto (o haya fallado).
+   * La petición al backend `/api/translate-page` solo envía los `croppedBubbles` y `boxes`, eliminando la necesidad de volver a transferir la imagen original y acelerando la respuesta al omitir operaciones de procesamiento gráfico en esta etapa crítica secuencial.
 
 ### Diagrama del Flujo de Datos
 
@@ -313,13 +316,14 @@ sequenceDiagram
     Note over Front: Carga ZIP o PDF con N páginas
     
     rect rgb(220, 240, 255)
-        Note over Front: FASE A: Detección en Cadena (Frenado ordenado de YOLOv8)
+        Note over Front: FASE A: Detección en Cadena (Frenado ordenado de YOLOv8 y Cropping)
         loop Para cada página i de 1 a N
             Front->>Back: POST /api/detect { imageBase64 }
             Back->>HF: POST /analyze-manga { image_base64 }
             HF-->>Back: Retorna boxes [ymin, xmin, ymax, xmax]
-            Back-->>Front: Retorna boxes[]
-            Note over Front: Dispara de inmediato detección página i+1
+            Note over Back: Jimp recorta (crops) cada globo en sub-imágenes (croppedBubbles)
+            Back-->>Front: Retorna { boxes[], croppedBubbles[] }
+            Note over Front: Almacena en caché y dispara de inmediato detección página i+1
         end
     end
 
@@ -327,19 +331,18 @@ sequenceDiagram
         Note over Front: FASE B: OCR + Traducción Secuencial (Con contexto en cadena)
         loop Para cada página i de 1 a N (esperando boxes y contexto anterior)
             Note over Front: Espera a que boxes de i y contexto de i-1 estén listos
-            Front->>Back: POST /api/translate-page { imageBase64, boxes, contexto_acumulado }
-            Note over Back: Jimp recorta sub-imágenes usando boxes recibidas
+            Front->>Back: POST /api/translate-page { croppedBubbles, boxes, contexto_acumulado }
             Back->>GPT: Envía sub-imágenes + contexto (Multimodal)
             GPT-->>Back: Retorna JSON { contexto, traducciones }
             Back-->>Front: Retorna { contexto, translations: TranslationBox[] }
-            Note over Front: Actualiza contexto_acumulado y renderiza overlays de i
+            Note over Front: Actualiza contexto_acumulado, renderiza overlays de i e inicia i+1
         end
     end
 ```
 
 ### Ventajas de esta Arquitectura
-* **Reducción de Latencia Total:** Al solapar la detección visual de la página `i+1` (que consume tiempo en Hugging Face) con la traducción de la página `i` (que consume tiempo en Azure GPT-4o), el tiempo total de procesamiento se reduce en aproximadamente un 30% a 40%.
+* **Reducción de Latencia Total:** Al solapar la detección visual y recorte de la página `i+1` (que consume tiempo en Hugging Face y CPU de backend) con la traducción de la página `i` (que consume tiempo en Azure GPT-4o), el tiempo total de procesamiento se reduce significativamente.
 * **Preservación del Contexto:** GPT-4o mantiene la máxima coherencia porque la traducción multimodal sigue siendo secuencial e iterativa, heredando el campo `contexto` en orden estricto.
 * **Salud del Servidor (HF):** Evita inundar Hugging Face con peticiones en paralelo que causarían bloqueos de tasa `429` o degradación por CPU contention.
-* **Resiliencia ante fallos:** Si la detección de una página falla, el flujo de detección continúa con las páginas siguientes y la traducción de esa página se marca con error, permitiendo reintentarla individualmente mediante un botón en la interfaz.
+* **Resiliencia ante fallos de Traducción:** Si la traducción de una página falla, la ejecución de la cola de traducción **no se detiene**. El pipeline continúa con las páginas siguientes buscando recursivamente hacia atrás en el caché el último contexto exitoso disponible. Esto permite al usuario ver la mayor parte del capítulo traducido e intentar reintentar de manera individual las páginas con error.
 

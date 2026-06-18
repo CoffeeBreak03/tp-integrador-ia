@@ -4,7 +4,10 @@ import { PipelineOrchestrator } from './orchestrator';
 import { validateTranslationContract } from './lib/validate-contract';
 
 interface TranslatePageRequest {
-  imageBase64: string;
+  croppedBubbles: Array<{
+    id: number;
+    base64: string;
+  }>;
   boxes: Array<{
     id: number;
     y_min: number;
@@ -18,8 +21,8 @@ interface TranslatePageRequest {
 export const translatePage = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as TranslatePageRequest;
-    if (!body.imageBase64) {
-      res.status(400).json({ error: 'Missing imageBase64' });
+    if (!body.croppedBubbles || !Array.isArray(body.croppedBubbles)) {
+      res.status(400).json({ error: 'Missing or invalid croppedBubbles' });
       return;
     }
     if (!body.boxes || !Array.isArray(body.boxes)) {
@@ -29,7 +32,7 @@ export const translatePage = async (req: Request, res: Response): Promise<void> 
 
     const azureClient = getAzureClient();
     const orchestrator = new PipelineOrchestrator(azureClient);
-    const result = await orchestrator.translatePageOnly(body.imageBase64, body.boxes, body.contexto);
+    const result = await orchestrator.translatePageOnly(body.croppedBubbles, body.boxes, body.contexto);
     const validated = validateTranslationContract(result.translations);
 
     res.status(200).json({
