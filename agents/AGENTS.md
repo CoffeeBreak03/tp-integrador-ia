@@ -39,9 +39,9 @@ sequenceDiagram
         Note over GPT: OCR japonés + Traducción español + Actualiza contexto
         GPT-->>Back: Retorna JSON { contexto, traducciones }
         Note over Back: Mezcla boxes espaciales y traducciones
-        Back->>Back: Valida conformidad con el Contrato JSON
+        Back->>Back: Filtra solapamientos duplicados y valida contrato
         Back-->>Front: Retorna { contexto, translations: TranslationBox[] }
-        Front->>Front: Cachea resultado y renderiza overlays
+        Front->>Front: Cachea resultado y renderiza overlays (solo traducido)
         Front->>Front: Pasa contexto actualizado a la siguiente iteración
     end
 ```
@@ -205,6 +205,31 @@ El componente [PageNavigator.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/c
 - Indicador "Página X / N" con el número actual y total.
 - Spinner animado si la página actual está siendo procesada.
 - Contador de progreso del capítulo `(procesadas/total)`.
+
+### 5.8. Margen de Seguridad (Padding) y Ordenamiento de Lectura (Recursive XY-Cut)
+1. **Margen de Seguridad (Padding)**: Durante la fase de parsing espacial en el backend ([orchestrator.ts](file:///e:/tmp/tp-integrador-ia/functions/src/orchestrator.ts)), se expanden las coordenadas de cada caja un 5% de su tamaño original (con un mínimo de 10 unidades sobre la escala 0-1000) en las cuatro direcciones. Esto optimiza el recorte físico para que el OCR no corte caracteres y permite que las cajas de texto en el frontend no queden apretadas.
+2. **Recursive XY-Cut (RXYC)**: Para que los globos de diálogo aparezcan ordenados según la secuencia de lectura manga (Derecha a Izquierda, Arriba a Abajo):
+   - El backend busca gutters (espacios vacíos continuos) horizontales para dividir el espacio en bloques superior e inferior.
+   - Si no los hay, busca gutters verticales para dividir en bloques derecho e izquierdo, leyendo el de la derecha primero (RTL).
+   - Si no hay separaciones claras, ordena de arriba a abajo con una tolerancia vertical de 40 unidades (4% del alto) para clasificar de derecha a izquierda los elementos que están en una misma línea.
+   - Los globos se reindexan con IDs del `1` al `N` siguiendo este orden antes del recorte, garantizando que tanto las llamadas a GPT-4o como el listado del frontend sigan el flujo narrativo coherente.
+
+### 5.9. Validación y Filtro de Solapamientos (Overlap Cleaning)
+Para descartar detecciones duplicadas o burbujas anidadas en el backend ([orchestrator.ts](file:///e:/tmp/tp-integrador-ia/functions/src/orchestrator.ts)):
+- Se compara cada par de cajas. Si la intersección entre la caja A (más chica) y la caja B cubre más del 70% del área de A:
+  - Se limpian los textos japoneses (`texto_original`) de espacios y puntuación.
+  - Si el texto limpio de una es una subcadena del otro (o si alguna está vacía por falla de OCR), se descarta la caja pequeña A y se conserva la caja grande B.
+
+### 5.10. Escalado Responsivo de Texto e Interacción Bidireccional
+1. **Escalado por Container Queries (Vía CSS/Tailwind)**:
+   - El contenedor de la imagen ([OverlayRenderer.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/OverlayRenderer.vue)) se declara como contenedor de tamaño lineal (`container-type: inline-size`).
+   - Se elimina el texto japonés de las cajas en la imagen, mostrando únicamente el texto traducido para maximizar la legibilidad.
+   - El tamaño de letra (`font-size`) de cada caja se calcula inline en unidades de contenedor (`cqw`) basándose en una relación matemática entre el área relativa de la caja y el conteo de caracteres. Esto escala de forma fluida y proporcional la tipografía cuando la imagen se redimensiona.
+2. **Hover Bidireccional (Dos Vías)**:
+   - Posicionar el cursor sobre una caja en la imagen resalta su borde e incrementa su nivel de superposición (`z-10` o `z-20`).
+   - Posicionar el cursor en la lista lateral ([TranslationPanel.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/TranslationPanel.vue)) destaca la caja correspondiente sobre la imagen.
+3. **Click-to-Focus y Scroll Autónomo**:
+   - Al hacer clic sobre una caja en la imagen, el sistema abre la barra lateral de traducción (si estaba cerrada) y realiza un scroll animado suave (`scrollIntoView`) hacia el botón del listado correspondiente, permitiendo al usuario leer cómodamente el texto completo y su original en japonés si la caja es muy pequeña.
 
 ---
 

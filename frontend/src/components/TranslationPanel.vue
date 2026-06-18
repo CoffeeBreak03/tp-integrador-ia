@@ -21,8 +21,15 @@
       <button
         v-for="item in filteredTranslations"
         :key="item.id"
+        :id="'translation-item-' + item.id"
         @click="selectItem(item)"
+        @mouseenter="emit('hoverItem', item.id)"
+        @mouseleave="emit('hoverItem', undefined)"
         class="w-full rounded-3xl border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 dark:hover:border-blue-400 dark:hover:bg-slate-900/80"
+        :class="{
+          'border-blue-500 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/20': item.id === selectedItemId,
+          'border-slate-200 dark:border-slate-800': item.id !== selectedItemId
+        }"
       >
         <p class="font-semibold text-slate-900 dark:text-slate-100">{{ item.texto_traducido }}</p>
         <p class="mt-2 text-xs text-slate-600 dark:text-slate-400">{{ item.texto_original }}</p>
@@ -41,10 +48,13 @@ import type { TranslationContract } from '@/lib/contract';
 
 const props = defineProps<{
   translations: TranslationContract[];
+  selectedItemId?: number;
+  hoveredItemId?: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'selectItem', item: TranslationContract): void;
+  (e: 'hoverItem', id: number | undefined): void;
 }>();
 
 const searchQuery = ref('');

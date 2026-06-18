@@ -127,9 +127,11 @@
                       :imageData="currentImageData"
                       :translations="currentTranslations"
                       :selectedItemId="selectedItemId"
+                      :hoveredItemId="hoveredItemId"
                       :showOverlay="showOverlay"
                       :fitToScreen="isFitToScreen"
                       :isLoading="isCurrentPageLoading"
+                      @selectBox="handleBoxClick"
                     />
                   </div>
 
@@ -150,7 +152,14 @@
                   class="pointer-events-none absolute right-0 top-0 h-full w-80 overflow-auto transition-transform duration-300"
                   :class="showTranslations ? 'pointer-events-auto translate-x-0' : 'translate-x-full'"
                 >
-                  <TranslationPanel v-if="currentTranslations.length" :translations="currentTranslations" @selectItem="highlightItem" />
+                  <TranslationPanel
+                    v-if="currentTranslations.length"
+                    :translations="currentTranslations"
+                    :selectedItemId="selectedItemId"
+                    :hoveredItemId="hoveredItemId"
+                    @selectItem="highlightItem"
+                    @hoverItem="handleHoverItem"
+                  />
                 </aside>
               </div>
             </div>
@@ -192,6 +201,7 @@ const asidePanel = ref<HTMLElement | null>(null);
 
 // --- Estado común ---
 const selectedItemId = ref<number | undefined>(undefined);
+const hoveredItemId = ref<number | undefined>(undefined);
 const showOverlay = ref(true);
 const showTranslations = ref(false);
 const isFitToScreen = ref(false);
@@ -448,6 +458,25 @@ onUnmounted(() => {
 // --- Handlers de UI ---
 const highlightItem = (item: TranslationContract) => {
   selectedItemId.value = item.id;
+};
+
+const handleHoverItem = (id: number | undefined) => {
+  hoveredItemId.value = id;
+};
+
+const handleBoxClick = async (item: TranslationContract) => {
+  selectedItemId.value = item.id;
+  const wasClosed = !showTranslations.value;
+  if (wasClosed) {
+    showTranslations.value = true;
+    await nextTick();
+  }
+  setTimeout(() => {
+    const el = document.getElementById(`translation-item-${item.id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, wasClosed ? 300 : 50);
 };
 
 const openExplorer = () => {

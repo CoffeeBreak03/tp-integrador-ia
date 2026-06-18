@@ -33,15 +33,19 @@
             <div
               v-for="item in translations"
               :key="item.id"
-              :style="styleFromBox(item.box)"
-              class="absolute rounded-xl border-2 bg-white/80 p-2 text-[11px] leading-tight shadow-md backdrop-blur dark:bg-slate-950/80"
+              :style="{
+                ...styleFromBox(item.box),
+                fontSize: getBoxFontSize(item.box, item.texto_traducido)
+              }"
+              @click="$emit('selectBox', item)"
+              class="absolute rounded-lg border-2 bg-white/80 p-1 leading-tight shadow-md backdrop-blur dark:bg-slate-950/80 cursor-pointer transition-all"
               :class="{
-                'border-blue-500 ring-2 ring-blue-400/40': item.id === selectedItemId,
-                'border-transparent': item.id !== selectedItemId,
+                'border-blue-500 ring-2 ring-blue-400/40 z-20': item.id === selectedItemId,
+                'border-blue-400 ring-2 ring-blue-400/20 z-10': item.id === hoveredItemId && item.id !== selectedItemId,
+                'border-transparent hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 hover:z-10': item.id !== selectedItemId && item.id !== hoveredItemId,
               }"
             >
               <p class="font-semibold text-slate-900 dark:text-slate-100">{{ item.texto_traducido }}</p>
-              <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">{{ item.texto_original }}</p>
             </div>
           </template>
         </div>
@@ -58,18 +62,23 @@ const props = defineProps<{
   imageData: string;
   translations: TranslationContract[];
   selectedItemId?: number;
+  hoveredItemId?: number;
   showOverlay: boolean;
   fitToScreen?: boolean;
   isLoading?: boolean;
 }>();
 
+const emit = defineEmits<{
+  (e: 'selectBox', item: TranslationContract): void;
+}>();
+
 const imgRef = ref<HTMLImageElement | null>(null);
 const wrapperRef = ref<HTMLElement | null>(null);
-const wrapperStyle = ref<Record<string, string>>({});
+const wrapperStyle = ref<Record<string, string>>({ containerType: 'inline-size' });
 const imageAspectRatio = ref(16 / 9);
 const imageClass = computed(() => {
   return props.fitToScreen
-    ? 'block max-h-full w-auto max-w-full object-contain'
+    ? 'block max-h-[calc(100vh-180px)] w-auto max-w-full object-contain'
     : 'block w-full h-auto object-contain';
 });
 
@@ -78,23 +87,19 @@ const updateWrapperSize = async () => {
   const wrapper = wrapperRef.value;
   if (!img || !wrapper) return;
   if (!props.fitToScreen) {
-    wrapperStyle.value = {};
+    wrapperStyle.value = { containerType: 'inline-size' };
     return;
   }
 
-  // Remove any previously locked pixel dimensions so the image
-  // can size itself according to CSS (max-height / aspect ratio).
-  // This prevents measuring a size that was already constrained by
-  // an earlier wrapperStyle and avoids accumulating shrinkage.
+  // Remove explicit size and container-type to allow natural shrink-wrap
   wrapperStyle.value = {};
 
-  // Wait for DOM to update so the image can reflow with the cleared styles.
   await nextTick();
 
-  const rect = img.getBoundingClientRect();
   wrapperStyle.value = {
-    width: `${Math.round(rect.width)}px`,
-    height: `${Math.round(rect.height)}px`,
+    width: `${Math.round(img.offsetWidth)}px`,
+    height: `${Math.round(img.offsetHeight)}px`,
+    containerType: 'inline-size'
   };
 };
 
@@ -138,5 +143,22 @@ const styleFromBox = (box: [number, number, number, number]) => {
     position: 'absolute',
     overflow: 'hidden',
   } as const;
+};
+
+const getBoxFontSize = (box: [number, number, number, number], text: string) => {
+  const [ymin, xmin, ymax, xmax] = box;
+  const w = (xmax - xmin) / 10; // % width
+  const h = (ymax - ymin) / 10; // % height
+  const ar = imageAspectRatio.value || 1;
+  const h_in_w = h / ar;
+  const area = w * h_in_w;
+  const charCount = text.length || 1;
+  
+  // Calculate relative size in cqw (Container Query Width)
+  let fontSizeCqw = Math.sqrt(area / (charCount * 0.55)) * 0.85;
+  
+  // Clamp between a reasonable readable range:
+  fontSizeCqw = Math.max(0.6, Math.min(1.4, fontSizeCqw));
+  return `${fontSizeCqw.toFixed(2)}cqw`;
 };
 </script>

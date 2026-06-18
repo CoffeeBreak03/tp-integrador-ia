@@ -188,11 +188,13 @@ class AzureClient {
             const systemPrompt = contexto
                 ? 'You are an expert manga OCR and translation engine working on a multi-page chapter. ' +
                     'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
+                    'IMPORTANT: If an image does not appear to contain any characters, or if it is a false positive detection, simply return "" (empty string) for both japanese text and spanish translation. ' +
                     'Use the chapter context provided to maintain narrative coherence (consistent names, tone, pronouns). ' +
                     'Update the context field with any new relevant information from this page. ' +
                     'Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.'
                 : 'You are an expert manga OCR and translation engine. ' +
                     'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
+                    'IMPORTANT: If an image does not appear to contain any characters, or if it is a false positive detection, simply return "" (empty string) for both japanese text and spanish translation. ' +
                     'Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.';
             const response = await (0, node_fetch_1.default)(url, {
                 method: 'POST',
