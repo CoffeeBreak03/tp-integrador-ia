@@ -1,38 +1,23 @@
-import { Handler } from '@netlify/functions';
+import { Request, Response } from 'express';
 import { getAzureClient } from './lib/azure-client';
 
 interface TranslateRequest {
   text: string;
 }
 
-export const handler: Handler = async (event, context) => {
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
-  }
-
+export const translateText = async (req: Request, res: Response): Promise<void> => {
   try {
-    const body = JSON.parse(event.body || '{}') as TranslateRequest;
+    const body = req.body as TranslateRequest;
     if (!body.text) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Missing text' }),
-      };
+      res.status(400).json({ error: 'Missing text' });
+      return;
     }
 
     const azureClient = getAzureClient();
     const result = await azureClient.callTranslateModel(body.text);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ translated: result }),
-    };
+    res.status(200).json({ translated: result });
   } catch (error) {
     console.error('Translate function error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: String(error) }),
-    };
+    res.status(500).json({ error: String(error) });
   }
 };

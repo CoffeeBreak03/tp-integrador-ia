@@ -1,4 +1,4 @@
-import { Handler } from '@netlify/functions';
+import { Request, Response } from 'express';
 import { getAzureClient } from './lib/azure-client';
 import { PipelineOrchestrator } from './orchestrator';
 import { validateTranslationContract } from './lib/validate-contract';
@@ -8,23 +8,12 @@ interface ProcessRequest {
   contexto?: string;
 }
 
-export const handler: Handler = async (event, context) => {
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
-  }
-
+export const processPage = async (req: Request, res: Response): Promise<void> => {
   try {
-    const body = JSON.parse(event.body || '{}') as ProcessRequest;
+    const body = req.body as ProcessRequest;
     if (!body.imageBase64) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify({ error: 'Missing imageBase64' }),
-      };
+      res.status(400).json({ error: 'Missing imageBase64' });
+      return;
     }
 
     const azureClient = getAzureClient();
@@ -32,14 +21,10 @@ export const handler: Handler = async (event, context) => {
     const result = await orchestrator.processMangaImage(body.imageBase64, body.contexto);
     const validated = validateTranslationContract(result.translations);
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({
-        contexto: result.contexto,
-        translations: validated,
-      }),
-    };
+    res.status(200).json({
+      contexto: result.contexto,
+      translations: validated,
+    });
   } catch (error) {
     console.error('Process function error:', error);
     const message = String(error ?? 'Unknown error').toLowerCase();
@@ -47,10 +32,6 @@ export const handler: Handler = async (event, context) => {
       ? 502
       : 500;
 
-    return {
-      statusCode,
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ error: String(error) }),
-    };
+    res.status(statusCode).json({ error: String(error) });
   }
 };

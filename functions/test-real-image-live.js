@@ -112,12 +112,12 @@ async function runTest() {
         log(`  [${idx + 1}] id=${globo.id}, box=${JSON.stringify(globo.box)}, text="${globo.texto_original.substring(0, 30)}..."`);
       });
 
-      logStep(4, 'Testing through Netlify function...');
+      logStep(4, 'Testing through Express backend...');
       
-      const netlifyStart = Date.now();
-      log('🚀 Sending request to /.netlify/functions/process...', 'blue');
+      const backendStart = Date.now();
+      log('🚀 Sending request to /api/process...', 'blue');
 
-      const netlifyResponse = await fetch('http://localhost:8888/.netlify/functions/process', {
+      const backendResponse = await fetch('http://localhost:3001/api/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,25 +128,31 @@ async function runTest() {
         timeout: 120000,
       });
 
-      const netlifyTime = Date.now() - netlifyStart;
-      log(`📊 Netlify response in ${netlifyTime}ms, status: ${netlifyResponse.status}`, 'cyan');
+      const backendTime = Date.now() - backendStart;
+      log(`📊 Backend response in ${backendTime}ms, status: ${backendResponse.status}`, 'cyan');
 
-      if (!netlifyResponse.ok) {
-        const errorText = await netlifyResponse.text();
-        logError(`HTTP ${netlifyResponse.status}: ${errorText.substring(0, 200)}`);
+      if (!backendResponse.ok) {
+        const errorText = await backendResponse.text();
+        logError(`HTTP ${backendResponse.status}: ${errorText.substring(0, 200)}`);
         process.exit(1);
       }
 
-      const netlifyData = await netlifyResponse.json();
+      const backendData = await backendResponse.json();
       
-      if (Array.isArray(netlifyData) && netlifyData.length > 0) {
-        logSuccess(`Netlify function returned ${netlifyData.length} translated boxes in ${netlifyTime}ms`);
+      if (backendData && backendData.translations && backendData.translations.length > 0) {
+        logSuccess(`Express backend returned ${backendData.translations.length} translated boxes in ${backendTime}ms`);
         log(`\n🎯 Final result (first 2 items):`);
-        netlifyData.slice(0, 2).forEach((box, idx) => {
+        backendData.translations.slice(0, 2).forEach((box, idx) => {
+          log(`  [${idx + 1}] "${box.texto_original}" → "${box.texto_traducido}"`);
+        });
+      } else if (Array.isArray(backendData) && backendData.length > 0) {
+        logSuccess(`Express backend returned ${backendData.length} translated boxes in ${backendTime}ms`);
+        log(`\n🎯 Final result (first 2 items):`);
+        backendData.slice(0, 2).forEach((box, idx) => {
           log(`  [${idx + 1}] "${box.texto_original}" → "${box.texto_traducido}"`);
         });
       } else {
-        logWarning(`Netlify returned empty or invalid response: ${JSON.stringify(netlifyData).substring(0, 100)}`);
+        logWarning(`Backend returned empty or invalid response: ${JSON.stringify(backendData).substring(0, 100)}`);
       }
 
     } catch (fetchError) {

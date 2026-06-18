@@ -10,7 +10,7 @@ Este documento centraliza toda la información técnica, de arquitectura y estru
 
 El stack tecnológico principal consiste en:
 - **Frontend**: Single Page Application (SPA) responsiva y progresiva (PWA) desarrollada en **Vue 3** + **TypeScript** + **Vite** + **TailwindCSS**.
-- **Backend**: Serverless API implementada con **Netlify Functions** + **Node.js** + **TypeScript**.
+- **Backend**: API implementada con **Node.js** + **Express.js** + **TypeScript** (preparado para **Azure App Service** u otros hosts de larga duración).
 - **Servicios de IA**: Pipeline de detección espacial (YOLOv8) alojado en **Hugging Face Spaces** y un motor OCR+Traducción multimodal (GPT-4o) alojado en **Azure AI Foundry**.
 
 ---
@@ -23,7 +23,7 @@ El stack tecnológico principal consiste en:
 sequenceDiagram
     participant Usuario as Cliente/Navegador
     participant Front as Frontend (Vue 3)
-    participant Back as Netlify Function (process)
+    participant Back as Backend (Express API)
     participant HF as Hugging Face Space (YOLOv8)
     participant GPT as Azure AI Foundry (GPT-4o)
 
@@ -77,7 +77,7 @@ Para garantizar que la interfaz de usuario sea responsiva a cualquier tamaño de
 
 ### Endpoints del Backend
 
-Todos los endpoints del backend se despliegan bajo `/.netlify/functions/*` y se redirigen mediante reglas de Netlify a `/api/*`.
+Todos los endpoints del backend están configurados en el enrutador de Express (`server.ts`) bajo la ruta base `/api/*`.
 
 1. **`POST /api/process` (Pipeline Completo)**
    - **Request**: `{"imageBase64": "data:image/jpeg;base64,...", "contexto": "<opcional, contexto del capítulo>"}`
@@ -127,12 +127,13 @@ tp-integrador-ia/
 │   ├── tailwind.config.js      ← Configuración de TailwindCSS (soporte oscuro/claro)
 │   ├── vite.config.ts          ← Configuración del empaquetador Vite
 │   └── vitest.config.ts        ← Configuración de pruebas Vitest + jsdom
-├── functions/                  ← API Backend Serverless (Netlify Functions)
+├── functions/                  ← API Backend (Node.js + Express)
 │   ├── src/
-│   │   ├── process.ts          ← Handler lambda principal (/process) con soporte de contexto
-│   │   ├── vision.ts           ← Handler lambda de detección (/vision)
-│   │   ├── translate.ts        ← Handler lambda de traducción de texto (/translate)
-│   │   ├── warm-up.ts          ← Handler lambda de precalentamiento (/warm-up)
+│   │   ├── server.ts           ← Punto de entrada de Express (Inicialización, Middlewares, Rutas)
+│   │   ├── process.ts          ← Endpoint de procesamiento (/process) con soporte de contexto
+│   │   ├── vision.ts           ← Endpoint de detección (/vision)
+│   │   ├── translate.ts        ← Endpoint de traducción (/translate)
+│   │   ├── warm-up.ts          ← Endpoint de precalentamiento (/warm-up)
 │   │   ├── orchestrator.ts     ← Coordinador del pipeline de IA con contexto acumulativo
 │   │   ├── lib/                
 │   │   │   ├── azure-client.ts       ← Cliente Azure/HF con prompt contextual para capítulos
@@ -145,7 +146,6 @@ tp-integrador-ia/
 │   ├── ocr-response.json       ← Mock de respuesta de YOLOv8
 │   ├── translate-response.json ← Mock de respuesta de GPT-4o
 │   └── integration-test-dataset.json  ← Dataset de prueba para integración
-├── netlify.toml                ← Configuración de rutas, builds, timeout (26s) y redirecciones
 └── package.json                ← Mono-repo scripts (setup, dev, build y tests)
 ```
 
@@ -196,7 +196,7 @@ Cuando se carga un capítulo, [App.vue](file:///e:/tmp/tp-integrador-ia/frontend
 3. GPT-4o usa el contexto acumulado para mantener la coherencia narrativa (nombres de personajes, tono, eventos).
 4. Los resultados exitosos se cachean en un `Map<number, CachedPage>`.
 5. Si ocurre un error, se guarda en el caché con los campos `hasError: true`, `errorType` y `errorMessage` para no detener la cola de procesamiento del resto de las páginas.
-6. Si el error fue un **timeout de Netlify** (detectado por errores 500, 502, 504 o la palabra clave "timeout"), se le muestra al usuario una advertencia y un botón de **Reintentar procesamiento**.
+6. Si el error fue un **timeout o cold start** (detectado por errores 500, 502, 504 o palabras clave relacionadas a Hugging Face), se le muestra al usuario una advertencia y un botón de **Reintentar procesamiento**.
 7. Al hacer clic en reintentar, se remueve el error de la caché y se agrega el índice de la página nuevamente a la cola de prioridad `chapterQueue` con prioridad alta (`priority: 1`). Esto asegura que se procese con prioridad inmediata (justo después de que termine la página actualmente en proceso) frente a las páginas restantes de prioridad estándar (`priority: 0`). Si el trabajador no estaba activo, se dispara de nuevo.
 8. El cliente HTTP ([api.ts](file:///e:/tmp/tp-integrador-ia/frontend/src/lib/api.ts)) implementa reintentos automáticos (máximo 3) con backoff exponencial antes de propagar un fallo al cliente.
 
@@ -236,7 +236,7 @@ Para descartar detecciones duplicadas o burbujas anidadas en el backend ([orches
 
 ### Variables de Entorno Requeridas
 
-Deben configurarse en un archivo `.env` en el directorio raíz (para desarrollo local con `netlify dev`) o en el panel de Netlify (Settings -> Environment Variables):
+Deben configurarse en un archivo `.env` en el directorio `functions/` o raíz (para desarrollo local con `npm run dev`) o en el panel de despliegue correspondiente (ej. Azure App Service):
 
 | Variable | Descripción | Valor Ejemplo |
 |----------|-------------|---------------|
@@ -292,7 +292,7 @@ Dividir el pipeline actual en dos etapas con diferentes modelos de ejecución:
 ```mermaid
 sequenceDiagram
     participant Front as Frontend (Vue 3)
-    participant Back as Netlify Functions
+    participant Back as Backend Express
     participant HF as Hugging Face (YOLO)
     participant GPT as Azure AI Foundry (GPT-4o)
 

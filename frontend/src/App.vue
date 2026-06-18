@@ -32,7 +32,7 @@
                 {{ isTimeoutError ? 'Tiempo de espera agotado (Timeout):' : 'Error al procesar la imagen:' }}
               </p>
               <p class="mt-1">
-                {{ isTimeoutError ? 'El servicio remoto tardó demasiado en responder (límite de Netlify). Esto suele suceder por un encendido en frío del servidor de Hugging Face. Puedes intentar procesarla nuevamente.' : errorMessage }}
+                {{ isTimeoutError ? 'El servicio remoto tardó demasiado en responder. Esto suele suceder por un encendido en frío del servidor de Hugging Face. Puedes intentar procesarla nuevamente.' : errorMessage }}
               </p>
               
               <!-- Botón de reintento manual solo para timeouts -->

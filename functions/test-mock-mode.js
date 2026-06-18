@@ -10,8 +10,8 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 // Forzar mock mode
 process.env.USE_MOCK_AZURE = 'true';
 
-const API_URL = process.env.NETLIFY_DEV_URL || 'http://localhost:8888';
-const ENDPOINT = '/.netlify/functions/process';
+const API_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const ENDPOINT = '/api/process';
 const IMAGE_PATH = path.join(__dirname, '../frontend/src/mock/imagen manga.jpeg');
 
 async function testMockMode() {
@@ -88,7 +88,7 @@ async function testMockMode() {
     console.error('\n❌ Test failed:');
     console.error(error.message);
     console.error('\nMake sure:');
-    console.error('  1. netlify dev is running on http://localhost:8888');
+    console.error('  1. The Express server is running on http://localhost:3001');
     console.error('  2. Mock files exist in mocks/ directory\n');
     process.exit(1);
   }

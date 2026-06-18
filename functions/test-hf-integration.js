@@ -7,8 +7,8 @@ const fetch = require('node-fetch');
 // Cargar variables de entorno
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-const API_URL = process.env.NETLIFY_DEV_URL || 'http://localhost:8888';
-const ENDPOINT = '/.netlify/functions/process';
+const API_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const ENDPOINT = '/api/process';
 const IMAGE_PATH = path.join(__dirname, '../frontend/src/mock/imagen manga.jpeg');
 
 async function testHFIntegration() {
@@ -79,7 +79,7 @@ async function testHFIntegration() {
     console.error('\n❌ Test failed:');
     console.error(error.message);
     console.error('\nMake sure:');
-    console.error('  1. netlify dev is running on http://localhost:8888');
+    console.error('  1. The Express server is running on http://localhost:3001');
     console.error('  2. HF_SPACE_API_URL is set in .env');
     console.error('  3. The Hugging Face Space is accessible\n');
     process.exit(1);

@@ -19,15 +19,14 @@
                     "raw": "{\n  \"imageBase64\": \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
                 },
                 "url": {
-                    "raw": "http://localhost:8888/.netlify/functions/vision",
+                    "raw": "http://localhost:3001/api/vision",
                     "protocol": "http",
                     "host": [
                         "localhost"
                     ],
-                    "port": "8888",
+                    "port": "3001",
                     "path": [
-                        ".netlify",
-                        "functions",
+                        "api",
                         "vision"
                     ]
                 }
@@ -48,15 +47,14 @@
                     "raw": "{\n  \"text\": \"こんにちは、これは漫画です\"\n}"
                 },
                 "url": {
-                    "raw": "http://localhost:8888/.netlify/functions/translate",
+                    "raw": "http://localhost:3001/api/translate",
                     "protocol": "http",
                     "host": [
                         "localhost"
                     ],
-                    "port": "8888",
+                    "port": "3001",
                     "path": [
-                        ".netlify",
-                        "functions",
+                        "api",
                         "translate"
                     ]
                 }
@@ -77,15 +75,14 @@
                     "raw": "{\n  \"imageBase64\": \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
                 },
                 "url": {
-                    "raw": "http://localhost:8888/.netlify/functions/process",
+                    "raw": "http://localhost:3001/api/process",
                     "protocol": "http",
                     "host": [
                         "localhost"
                     ],
-                    "port": "8888",
+                    "port": "3001",
                     "path": [
-                        ".netlify",
-                        "functions",
+                        "api",
                         "process"
                     ]
                 }

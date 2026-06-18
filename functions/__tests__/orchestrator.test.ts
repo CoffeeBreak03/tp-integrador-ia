@@ -169,8 +169,8 @@ describe('Pipeline orchestrator', () => {
                 JSON.stringify({
                     contexto: 'Context',
                     traducciones: [
-                        { id: 1, texto_japones: 'こんにちは、世界', traduccion_espanol: 'Hola, mundo' },
-                        { id: 2, texto_japones: 'こんにちは', traduccion_espanol: 'Hola' },
+                        { id: 1, texto_japones: 'こんにちは', traduccion_espanol: 'Hola' },
+                        { id: 2, texto_japones: 'こんにちは、世界', traduccion_espanol: 'Hola, mundo' },
                     ]
                 })
             ),
@@ -179,7 +179,7 @@ describe('Pipeline orchestrator', () => {
         const orchestrator = new PipelineOrchestrator(mockAzure);
         const result = await orchestrator.processMangaImage('base64...');
 
-        // The overlap cleaner should filter out ID 2 because it overlaps >70% and its text is a substring of ID 1
+        // The overlap cleaner should filter out ID 1 (small box, now reindexed to id 1) and keep ID 2 (large box, now id 2)
         expect(result.translations).toHaveLength(1);
         expect(result.translations[0].texto_original).toBe('こんにちは、世界');
     });

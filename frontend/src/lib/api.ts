@@ -72,7 +72,7 @@ export async function processPage(
 
   try {
     const response = await fetchWithRetry(
-      '/.netlify/functions/process',
+      '/api/process',
       {
         method: 'POST',
         headers: {

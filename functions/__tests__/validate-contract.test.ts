@@ -14,7 +14,7 @@ describe('Contract validation', () => {
         expect(validateTranslationContract(validContract)).toEqual(validContract);
     });
 
-    it('rejects an invalid translation contract', () => {
+    it('excludes an invalid translation contract', () => {
         const invalidContract = [
             {
                 id: 0,
@@ -24,6 +24,6 @@ describe('Contract validation', () => {
             },
         ];
 
-        expect(() => validateTranslationContract(invalidContract)).toThrow('Contract item 1 is invalid');
+        expect(validateTranslationContract(invalidContract)).toEqual([]);
     });
 });

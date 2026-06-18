@@ -1,13 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
+exports.warmUp = void 0;
 const azure_client_1 = require("./lib/azure-client");
 /**
  * Endpoint para despertar el HF Space (cold start).
  * Envía una imagen dummy para que el servicio inicie si está dormido.
  * Useful para evitar timeouts en la primera petición real.
  */
-const handler = async (event) => {
+const warmUp = async (req, res) => {
     console.log('[WARM_UP] Starting HF Space warm-up...');
     try {
         const client = (0, azure_client_1.getAzureClient)();
@@ -48,27 +48,21 @@ const handler = async (event) => {
         const result = await client.detectTextBubbles(dummyBase64);
         const elapsed = Date.now() - startTime;
         console.log('[WARM_UP] HF Space responded in ' + elapsed + 'ms');
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                status: 'success',
-                message: 'HF Space warmed up successfully',
-                elapsed_ms: elapsed,
-            }),
-        };
+        res.status(200).json({
+            status: 'success',
+            message: 'HF Space warmed up successfully',
+            elapsed_ms: elapsed,
+        });
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error('[WARM_UP] Failed to warm up HF Space:', message);
-        return {
-            statusCode: 503,
-            body: JSON.stringify({
-                status: 'error',
-                message: 'Failed to warm up HF Space: ' + message,
-                hint: 'The HF Space might be in cold start. Try again in a few seconds.',
-            }),
-        };
+        res.status(503).json({
+            status: 'error',
+            message: 'Failed to warm up HF Space: ' + message,
+            hint: 'The HF Space might be in cold start. Try again in a few seconds.',
+        });
     }
 };
-exports.handler = handler;
+exports.warmUp = warmUp;
 //# sourceMappingURL=warm-up.js.map

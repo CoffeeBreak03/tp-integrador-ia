@@ -1,36 +1,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
+exports.translateText = void 0;
 const azure_client_1 = require("./lib/azure-client");
-const handler = async (event, context) => {
-    if (event.httpMethod !== 'POST') {
-        return {
-            statusCode: 405,
-            body: JSON.stringify({ error: 'Method not allowed' }),
-        };
-    }
+const translateText = async (req, res) => {
     try {
-        const body = JSON.parse(event.body || '{}');
+        const body = req.body;
         if (!body.text) {
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ error: 'Missing text' }),
-            };
+            res.status(400).json({ error: 'Missing text' });
+            return;
         }
         const azureClient = (0, azure_client_1.getAzureClient)();
         const result = await azureClient.callTranslateModel(body.text);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ translated: result }),
-        };
+        res.status(200).json({ translated: result });
     }
     catch (error) {
         console.error('Translate function error:', error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: String(error) }),
-        };
+        res.status(500).json({ error: String(error) });
     }
 };
-exports.handler = handler;
+exports.translateText = translateText;
 //# sourceMappingURL=translate.js.map

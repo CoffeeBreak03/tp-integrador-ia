@@ -1,4 +1,4 @@
-import { Handler } from '@netlify/functions';
+import { Request, Response } from 'express';
 import { getAzureClient } from './lib/azure-client';
 
 /**
@@ -6,7 +6,7 @@ import { getAzureClient } from './lib/azure-client';
  * Envía una imagen dummy para que el servicio inicie si está dormido.
  * Useful para evitar timeouts en la primera petición real.
  */
-export const handler: Handler = async (event) => {
+export const warmUp = async (req: Request, res: Response): Promise<void> => {
   console.log('[WARM_UP] Starting HF Space warm-up...');
 
   try {
@@ -53,25 +53,19 @@ export const handler: Handler = async (event) => {
 
     console.log('[WARM_UP] HF Space responded in ' + elapsed + 'ms');
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        status: 'success',
-        message: 'HF Space warmed up successfully',
-        elapsed_ms: elapsed,
-      }),
-    };
+    res.status(200).json({
+      status: 'success',
+      message: 'HF Space warmed up successfully',
+      elapsed_ms: elapsed,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[WARM_UP] Failed to warm up HF Space:', message);
 
-    return {
-      statusCode: 503,
-      body: JSON.stringify({
-        status: 'error',
-        message: 'Failed to warm up HF Space: ' + message,
-        hint: 'The HF Space might be in cold start. Try again in a few seconds.',
-      }),
-    };
+    res.status(503).json({
+      status: 'error',
+      message: 'Failed to warm up HF Space: ' + message,
+      hint: 'The HF Space might be in cold start. Try again in a few seconds.',
+    });
   }
 };
