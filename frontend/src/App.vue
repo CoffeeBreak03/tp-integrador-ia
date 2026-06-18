@@ -28,8 +28,23 @@
         <section class="space-y-4">
           <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/80">
             <div v-if="errorMessage" class="mb-4 rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300">
-              <p class="font-semibold">Error al procesar la imagen:</p>
-              <p class="mt-1">{{ errorMessage }}</p>
+              <p class="font-semibold">
+                {{ isTimeoutError ? 'Tiempo de espera agotado (Timeout):' : 'Error al procesar la imagen:' }}
+              </p>
+              <p class="mt-1">
+                {{ isTimeoutError ? 'El servicio remoto tardó demasiado en responder (límite de Netlify). Esto suele suceder por un encendido en frío del servidor de Hugging Face. Puedes intentar procesarla nuevamente.' : errorMessage }}
+              </p>
+              
+              <!-- Botón de reintento manual solo para timeouts -->
+              <div v-if="isTimeoutError" class="mt-3">
+                <button
+                  type="button"
+                  @click="handleRetry"
+                  class="rounded-full border border-red-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-red-700 shadow-sm transition hover:bg-red-50 focus:outline-none dark:border-red-700 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-slate-800"
+                >
+                  Reintentar procesamiento
+                </button>
+              </div>
             </div>
 
             <div v-if="isLoading && !isChapterMode" class="mb-4 rounded-2xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
@@ -38,9 +53,6 @@
                 <div class="flex-1">
                   <p class="font-semibold">{{ loadingMessage }}</p>
                   <p class="mt-1 text-xs opacity-75">Tiempo: {{ loadingElapsedSeconds }}s</p>
-                  <p v-if="loadingElapsedSeconds > 10" class="mt-1 text-xs opacity-75 italic">
-                    ⚡ Iniciando servicio remoto (primera solicitud). Esto puede tomar hasta 60 segundos...
-                  </p>
                 </div>
               </div>
               <div class="mt-3 h-1 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900">
@@ -135,6 +147,17 @@
                     />
                   </div>
 
+                  <!-- Navegación de páginas inferior (solo en modo capítulo) -->
+                  <PageNavigator
+                    v-if="isChapterMode"
+                    class="mt-4"
+                    :currentPage="currentPageIndex + 1"
+                    :totalPages="chapterPages.length"
+                    :isCurrentPageLoading="isCurrentPageLoading"
+                    :processedPages="processedPagesCount"
+                    @goToPage="goToPageAndScrollUp"
+                  />
+
                   <div v-if="currentImageData" class="mt-4 flex justify-center">
                     <button
                       type="button"
@@ -217,7 +240,12 @@ const singleImageData = ref('');
 const singleTranslations = ref<TranslationContract[]>([]);
 
 // --- Estado del capítulo (multi-página) ---
+interface QueueItem {
+  index: number;
+  priority: number;
+}
 const chapterPages = ref<string[]>([]);
+const chapterQueue = ref<QueueItem[]>([]);
 const currentPageIndex = ref(0);
 const chapterContext = ref('');
 const isProcessingChapter = ref(false);
@@ -226,12 +254,20 @@ let chapterProcessingAborted = false;
 interface CachedPage {
   translations: TranslationContract[];
   contexto: string;
+  hasError?: boolean;
+  errorType?: 'timeout' | 'other';
+  errorMessage?: string;
 }
 const pageCache = ref<Map<number, CachedPage>>(new Map());
 const pagesInProcess = ref<Set<number>>(new Set());
 
 // --- Computed ---
 const isChapterMode = computed(() => chapterPages.value.length > 1);
+
+const isTimeoutError = computed(() => {
+  if (!errorMessage.value) return false;
+  return /500|502|504|timeout|limit/i.test(errorMessage.value);
+});
 
 const currentImageData = computed(() => {
   if (isChapterMode.value) {
@@ -256,7 +292,14 @@ const isCurrentPageLoading = computed(() => {
   return isLoading.value;
 });
 
-const processedPagesCount = computed(() => pageCache.value.size);
+const processedPagesCount = computed(() => {
+  // Solo contar páginas que terminaron con éxito (no tienen error)
+  let count = 0;
+  for (const page of pageCache.value.values()) {
+    if (!page.hasError) count++;
+  }
+  return count;
+});
 
 // --- Escala del contenedor ---
 const scale = ref(1);
@@ -330,6 +373,7 @@ const handleSingleImage = async (imageDataUrl: string) => {
 const resetChapter = () => {
   chapterProcessingAborted = true;
   chapterPages.value = [];
+  chapterQueue.value = [];
   currentPageIndex.value = 0;
   chapterContext.value = '';
   pageCache.value = new Map();
@@ -350,36 +394,50 @@ const handleChapterLoaded = async (pages: string[]) => {
   chapterPages.value = pages;
   currentPageIndex.value = 0;
 
+  // Encolar todas las páginas con prioridad 0
+  chapterQueue.value = Array.from({ length: pages.length }, (_, i) => ({ index: i, priority: 0 }));
+
   await nextTick();
   recalcScale();
 
-  // Iniciar procesamiento secuencial
-  processChapterSequentially();
+  // Iniciar procesamiento en cola
+  processQueue();
 };
 
-const processChapterSequentially = async () => {
+const processQueue = async () => {
+  if (isProcessingChapter.value) return;
   isProcessingChapter.value = true;
 
-  for (let i = 0; i < chapterPages.value.length; i++) {
-    // Verificar si se abortó el procesamiento (por ej. si el usuario cargó otro archivo)
-    if (chapterProcessingAborted) {
-      console.log('[CHAPTER] Processing aborted at page', i);
-      break;
-    }
+  while (chapterQueue.value.length > 0 && !chapterProcessingAborted) {
+    const item = chapterQueue.value[0];
+    const i = item.index;
 
-    // Saltar si ya está en caché
-    if (pageCache.value.has(i)) {
-      console.log('[CHAPTER] Page', i, 'already cached, skipping');
+    // Si ya está en caché con éxito y no está en proceso, la sacamos de la cola
+    const cached = pageCache.value.get(i);
+    if (cached && !cached.hasError && !pagesInProcess.value.has(i)) {
+      chapterQueue.value.shift();
       continue;
     }
 
     pagesInProcess.value.add(i);
+    chapterQueue.value.shift();
 
     try {
-      console.log('[CHAPTER] Processing page', i + 1, '/', chapterPages.value.length);
+      console.log('[CHAPTER] Processing page', i + 1, '/', chapterPages.value.length, 'priority:', item.priority);
+      
+      // Obtener el último contexto válido buscando hacia atrás
+      let prevContext = '';
+      for (let prev = i - 1; prev >= 0; prev--) {
+        const p = pageCache.value.get(prev);
+        if (p && p.contexto) {
+          prevContext = p.contexto;
+          break;
+        }
+      }
+
       const result = await processPage(
         chapterPages.value[i],
-        chapterContext.value || undefined
+        prevContext || undefined
       );
 
       // Si se abortó mientras procesaba, no cachear
@@ -391,29 +449,32 @@ const processChapterSequentially = async () => {
         contexto: result.contexto,
       });
 
-      // Actualizar contexto acumulativo para la siguiente página
-      if (result.contexto) {
-        chapterContext.value = result.contexto;
+      // Si es la página actual, limpiar el error si tuviera
+      if (i === currentPageIndex.value) {
+        errorMessage.value = null;
       }
 
-      console.log('[CHAPTER] Page', i + 1, 'complete:', result.translations.length, 'boxes, context:', result.contexto.length, 'chars');
+      console.log('[CHAPTER] Page', i + 1, 'complete:', result.translations.length, 'boxes');
     } catch (error) {
       console.error('[CHAPTER] Error processing page', i + 1, ':', error);
 
-      // Si se abortó, no mostrar error
       if (chapterProcessingAborted) break;
 
-      // Cachear una entrada vacía para no bloquear la cola
+      const msg = error instanceof Error ? error.message : String(error);
+      const isTimeout = /502|504|timeout|limit/i.test(msg);
+
+      // Cachear una entrada de error
       pageCache.value.set(i, {
         translations: [],
-        contexto: chapterContext.value,
+        contexto: i > 0 ? (pageCache.value.get(i - 1)?.contexto || '') : '',
+        hasError: true,
+        errorType: isTimeout ? 'timeout' : 'other',
+        errorMessage: msg,
       });
 
       // Mostrar error solo si es la página actual
       if (i === currentPageIndex.value) {
-        errorMessage.value = error instanceof Error
-          ? `Error en página ${i + 1}: ${error.message}`
-          : `Error desconocido en página ${i + 1}`;
+        errorMessage.value = msg;
       }
     } finally {
       pagesInProcess.value.delete(i);
@@ -423,6 +484,43 @@ const processChapterSequentially = async () => {
   isProcessingChapter.value = false;
 };
 
+const handleRetry = async () => {
+  if (isChapterMode.value) {
+    const idx = currentPageIndex.value;
+    console.log('[RETRY] Retrying page', idx + 1, 'with high priority');
+
+    // 1. Limpiar de la caché
+    pageCache.value.delete(idx);
+
+    // 2. Limpiar el error actual
+    errorMessage.value = null;
+
+    // 3. Encolar con prioridad alta (1) si no está ya, o actualizar si está
+    const existingIndex = chapterQueue.value.findIndex(item => item.index === idx);
+    if (existingIndex === -1) {
+      chapterQueue.value.push({ index: idx, priority: 1 });
+    } else {
+      chapterQueue.value[existingIndex].priority = 1;
+    }
+
+    // Ordenar la cola: primero prioridad desc, luego index asc
+    chapterQueue.value.sort((a, b) => {
+      if (b.priority !== a.priority) {
+        return b.priority - a.priority;
+      }
+      return a.index - b.index;
+    });
+
+    // 4. Iniciar procesamiento si no está corriendo
+    if (!isProcessingChapter.value) {
+      processQueue();
+    }
+  } else {
+    // Modo individual
+    handleSingleImage(singleImageData.value);
+  }
+};
+
 // --- Navegación de páginas ---
 const goToPage = (pageNumber: number) => {
   const idx = pageNumber - 1;
@@ -430,7 +528,24 @@ const goToPage = (pageNumber: number) => {
 
   currentPageIndex.value = idx;
   selectedItemId.value = undefined;
-  errorMessage.value = null;
+
+  // Restaurar error si la página destino falló
+  const cached = pageCache.value.get(idx);
+  if (cached && cached.hasError) {
+    errorMessage.value = cached.errorMessage || 'Error desconocido';
+  } else {
+    errorMessage.value = null;
+  }
+};
+
+const goToPageAndScrollUp = (pageNumber: number) => {
+  goToPage(pageNumber);
+  nextTick(() => {
+    const el = centerContainer.value;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
 };
 
 // --- Watchers ---

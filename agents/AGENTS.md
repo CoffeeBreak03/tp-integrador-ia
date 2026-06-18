@@ -189,22 +189,21 @@ El componente [ImageUploader.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/c
 - Si se sube un solo archivo (imagen o PDF de una página), se mantiene el comportamiento legacy emitiendo `update:imageData`.
 - Límite máximo configurable de **50 páginas** por capítulo.
 
-### 5.6. Procesamiento Secuencial con Contexto
-Cuando se carga un capítulo, [App.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/App.vue) orquesta el procesamiento secuencial:
-1. El frontend envía `POST /api/process` para cada página, una a la vez.
-2. En cada request se incluye el campo `contexto` devuelto por la página anterior.
-3. GPT-4o usa el contexto para mantener coherencia narrativa (nombres de personajes, tono, eventos).
-4. Cada resultado se cachea en un `Map<number, CachedPage>` indexado por número de página.
-5. Si el usuario navega a una página ya cacheada, los overlays se renderizan instantáneamente.
-6. Si navega a una página aún no procesada, se muestra un spinner de carga centrado sobre la imagen.
-7. El cliente HTTP ([api.ts](file:///e:/tmp/tp-integrador-ia/frontend/src/lib/api.ts)) implementa reintentos automáticos (máximo 3) con backoff exponencial para mitigar timeouts de cold start.
+### 5.6. Procesamiento Secuencial con Contexto y Sistema de Cola
+Cuando se carga un capítulo, [App.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/App.vue) orquesta el procesamiento secuencial utilizando una cola de páginas (`chapterQueue`):
+1. El frontend encola los índices de todas las páginas cargadas.
+2. Un trabajador asíncrono (`processQueue`) procesa la cola de a una página a la vez. En cada llamada a `POST /api/process` se busca secuencialmente hacia atrás el último contexto válido devuelto por las páginas anteriores.
+3. GPT-4o usa el contexto acumulado para mantener la coherencia narrativa (nombres de personajes, tono, eventos).
+4. Los resultados exitosos se cachean en un `Map<number, CachedPage>`.
+5. Si ocurre un error, se guarda en el caché con los campos `hasError: true`, `errorType` y `errorMessage` para no detener la cola de procesamiento del resto de las páginas.
+6. Si el error fue un **timeout de Netlify** (detectado por errores 500, 502, 504 o la palabra clave "timeout"), se le muestra al usuario una advertencia y un botón de **Reintentar procesamiento**.
+7. Al hacer clic en reintentar, se remueve el error de la caché y se agrega el índice de la página nuevamente a la cola de prioridad `chapterQueue` con prioridad alta (`priority: 1`). Esto asegura que se procese con prioridad inmediata (justo después de que termine la página actualmente en proceso) frente a las páginas restantes de prioridad estándar (`priority: 0`). Si el trabajador no estaba activo, se dispara de nuevo.
+8. El cliente HTTP ([api.ts](file:///e:/tmp/tp-integrador-ia/frontend/src/lib/api.ts)) implementa reintentos automáticos (máximo 3) con backoff exponencial antes de propagar un fallo al cliente.
 
 ### 5.7. Navegación de Páginas
-El componente [PageNavigator.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/PageNavigator.vue) muestra:
-- Botones "Anterior" y "Siguiente" para navegar entre páginas.
-- Indicador "Página X / N" con el número actual y total.
-- Spinner animado si la página actual está siendo procesada.
-- Contador de progreso del capítulo `(procesadas/total)`.
+El componente [PageNavigator.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/PageNavigator.vue) se instancia en dos ubicaciones de la interfaz (en la parte superior de la página y al pie de la imagen de manga):
+- Muestra botones "Anterior" y "Siguiente", indicador "Página X / N", spinner animado y progreso del capítulo.
+- Al interactuar con la navegación inferior, la pantalla realiza un scroll suave autónomo (`scrollIntoView`) que enfoca la parte superior de la imagen para facilitar una lectura fluida.
 
 ### 5.8. Margen de Seguridad (Padding) y Ordenamiento de Lectura (Recursive XY-Cut)
 1. **Margen de Seguridad (Padding)**: Durante la fase de parsing espacial en el backend ([orchestrator.ts](file:///e:/tmp/tp-integrador-ia/functions/src/orchestrator.ts)), se expanden las coordenadas de cada caja un 5% de su tamaño original (con un mínimo de 10 unidades sobre la escala 0-1000) en las cuatro direcciones. Esto optimiza el recorte físico para que el OCR no corte caracteres y permite que las cajas de texto en el frontend no queden apretadas.
@@ -276,3 +275,59 @@ El flujo en `.github/workflows/ci.yml` se ejecuta automáticamente en cada commi
 2. Ejecución secuencial de `npm run test` en ambos subdirectorios.
 3. Compilación (build) de ambos proyectos para verificar que no haya fallos de TypeScript.
 4. Despliegue automático a producción en Netlify si los tests pasan exitosamente en la rama `main`.
+
+---
+
+## 🚀 8. Propuesta de Arquitectura: Pipeline Híbrido Concurrente (Futura Optimización)
+
+Para capítulos largos, se propone un enfoque híbrido que reduce drásticamente la latencia total del capítulo sin sacrificar la coherencia narrativa asistida por contexto.
+
+### Concepto Clave
+Dividir el pipeline actual en dos etapas con diferentes modelos de ejecución:
+1. **Fase de Detección (Concurrente/Paralela)**: Las coordenadas de los globos de diálogo (`box`) no dependen de la historia del manga. Por lo tanto, se puede realizar la detección espacial (YOLOv8) para **todas las páginas en paralelo**.
+2. **Fase de OCR y Traducción (Secuencial con Contexto)**: Se mantiene de forma secuencial, donde cada página es enviada a GPT-4o junto con sus coordenadas precalculadas y el contexto devuelto por la traducción de la página anterior.
+
+### Arquitectura Propuesta del Flujo de Datos
+
+```mermaid
+sequenceDiagram
+    participant Front as Frontend (Vue 3)
+    participant Back as Netlify Functions
+    participant HF as Hugging Face (YOLO)
+    participant GPT as Azure AI Foundry (GPT-4o)
+
+    Note over Front: Carga ZIP o PDF con N páginas
+    
+    rect rgb(220, 240, 255)
+        Note over Front: FASE A: Detección Espacial Concurrente (Paralelo)
+        Paralelo por cada página (1..N)
+            Front->>Back: POST /api/detect { imageBase64 }
+            Back->>HF: POST /analyze-manga { image_base64 }
+            HF-->>Back: Retorna boxes [ymin, xmin, ymax, xmax]
+            Back-->>Front: Retorna boxes[] precalculadas
+        end
+    end
+
+    rect rgb(230, 255, 230)
+        Note over Front: FASE B: OCR + Traducción Secuencial (Secuencial)
+        loop Para cada página i de 1 a N
+            Front->>Back: POST /api/translate-page { imageBase64, boxes, contexto_acumulado }
+            Note over Back: Jimp recorta sub-imágenes usando boxes precalculadas
+            Back->>GPT: Envía sub-imágenes + contexto (Multimodal)
+            GPT-->>Back: Retorna JSON { contexto, traducciones }
+            Back-->>Front: Retorna { contexto, translations: TranslationBox[] }
+            Note over Front: Actualiza contexto_acumulado y renderiza
+        end
+    end
+```
+
+### Ventajas de esta Propuesta
+* **Reducción de Latencia**: La fase de detección visual (que requiere comunicación con Hugging Face y suele ser el cuello de botella físico) se realiza en paralelo para todo el capítulo al inicio.
+* **Preservación del Contexto**: GPT-4o mantiene la máxima coherencia porque la traducción multimodal sigue siendo secuencial e iterativa.
+* **Menor procesamiento en Azure**: La llamada secuencial de traducción es más ligera porque el backend ya tiene las coordenadas listas y no tiene que esperar a YOLOv8 en cada iteración.
+
+### Requisitos Técnicos para la Implementación
+1. **Desacoplar la Orquestación**: Dividir [PipelineOrchestrator](file:///c:/Users/Francisco/source/tp-ia-aplicada/tp-integrador-ia/functions/src/orchestrator.ts#L5) en dos métodos diferenciados o endpoints independientes (`/api/detect` y `/api/translate-page`).
+2. **Manejo de Concurrencia en Frontend**: Implementar un pool de concurrencia limitada (por ejemplo, máx. 3 o 4 peticiones simultáneas) al llamar a `/api/detect` para evitar saturar el ancho de banda del cliente y evitar hitting de límites de tasa (`429`) en el Space de Hugging Face.
+3. **Caché de Detecciones**: Estructurar el almacenamiento en el frontend para guardar de forma diferenciada el estado de la detección (boxes listas) y el estado de la traducción (texto traducido listo).
+
