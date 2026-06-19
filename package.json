@@ -7,6 +7,8 @@
     "dev": "concurrently \"cd frontend && npm run dev\" \"cd functions && npm run dev\"",
     "build:all": "cd frontend && npm run build && cd ../functions && npm run build",
     "build:all:dev": "cd frontend && npm run build",
+    "build": "npm run setup && npm run build:all",
+    "start": "node functions/dist/server.js",
     "test:all": "npm run test:frontend && npm run test:backend",
     "test:coverage:all": "npm run test:coverage:frontend && npm run test:coverage:backend",
     "test:frontend": "cd frontend && npm run test",

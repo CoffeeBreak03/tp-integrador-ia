@@ -34,6 +34,8 @@
 </template>
 <script setup lang="ts">
 import { ref } from 'vue';
+// @ts-ignore
+import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 
 const MAX_PAGES = 50;
 const MAX_CANVAS_WIDTH = 1200;
@@ -71,9 +73,7 @@ const handlePdfFile = async (file: File): Promise<string[]> => {
   const arrayBuffer = await file.arrayBuffer();
   // @ts-ignore
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  // @ts-ignore
-  const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
-  pdfjs.GlobalWorkerOptions.workerSrc = (workerModule.default ?? workerModule) as string;
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
   const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
   const pdf = await loadingTask.promise;

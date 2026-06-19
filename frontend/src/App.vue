@@ -507,7 +507,11 @@ const runTranslationChain = async () => {
 
       // Condición de sincronización: Las cajas de detección deben estar listas
       if (cached.detectionStatus !== 'success') {
-        // Rompemos el loop de traducción secuencial aquí.
+        if (cached.detectionStatus === 'error') {
+          // Si la detección falló con error, la saltamos para no bloquear las siguientes páginas
+          continue;
+        }
+        // Rompemos el loop de traducción secuencial aquí (si está en 'idle' o 'loading').
         // Se reanudará cuando triggerTranslationStep sea llamado tras completarse la detección de esta página.
         break;
       }

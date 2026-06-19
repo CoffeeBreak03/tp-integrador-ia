@@ -28,8 +28,8 @@ async function fetchWithRetry(
     try {
       const response = await fetch(url, options);
 
-      // Solo reintentar en errores de servidor transitorios (502, 503, 504)
-      if (response.status >= 502 && response.status <= 504 && attempt < retries) {
+      // Reintentar en errores de servidor transitorios (500, 502, 503, 504)
+      if (((response.status >= 502 && response.status <= 504) || response.status === 500) && attempt < retries) {
         const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
         console.warn(`[API] Retry ${attempt + 1}/${retries} after ${response.status}, waiting ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
