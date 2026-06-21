@@ -1,0 +1,34 @@
+{
+  "fileHash": "71afacb4d2693df8b72c42edaa41e9089484cefcfe4149a2639dae3e95e1f729",
+  "fileType": "image",
+  "pages": [
+    {
+      "pageIndex": 0,
+      "translations": [
+        {
+          "id": 1,
+          "box": [
+            52,
+            749,
+            715,
+            955
+          ],
+          "texto_original": "ビビるな\nビビるな\n俺は思念体",
+          "texto_traducido": "No te asustes. No te asustes. Soy una entidad espiritual."
+        },
+        {
+          "id": 2,
+          "box": [
+            385,
+            25,
+            890,
+            222
+          ],
+          "texto_original": "俺たちゃ\n互いに\n触れ合え\nねえし",
+          "texto_traducido": "Nosotros no podemos tocarnos mutuamente."
+        }
+      ],
+      "contexto": ""
+    }
+  ]
+}

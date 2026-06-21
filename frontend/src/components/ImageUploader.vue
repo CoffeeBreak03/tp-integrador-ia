@@ -36,6 +36,7 @@
 import { ref } from 'vue';
 // @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
+import { calculateFileHash } from '@/lib/hash';
 
 const MAX_PAGES = 50;
 const MAX_CANVAS_WIDTH = 1200;
@@ -45,6 +46,7 @@ const props = defineProps<{ imageData: string }>();
 const emit = defineEmits<{
   (e: 'update:imageData', value: string): void;
   (e: 'chapterLoaded', pages: string[]): void;
+  (e: 'fileHashed', payload: { hash: string; type: string }): void;
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -149,6 +151,20 @@ const handleFileUpload = async (event: Event) => {
     // Caso: un solo archivo
     if (files.length === 1) {
       const file = files[0];
+
+      // Calcular el hash del archivo
+      try {
+        const hash = await calculateFileHash(file);
+        let fileType = 'image';
+        if (file.type === 'application/pdf') {
+          fileType = 'pdf';
+        } else if (file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip')) {
+          fileType = 'zip';
+        }
+        emit('fileHashed', { hash, type: fileType });
+      } catch (hashError) {
+        console.error('[HASH] Failed to calculate hash for uploaded file:', hashError);
+      }
 
       if (file.type === 'application/pdf') {
         // PDF multi-página
