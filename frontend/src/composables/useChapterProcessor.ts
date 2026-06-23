@@ -34,6 +34,8 @@ export function useChapterProcessor() {
 
   // Estado de caché
   const lastUploadedFile = ref<{ hash: string; type: string } | null>(null);
+  const cacheHitCount = ref(0);
+  const showCacheToast = ref(false);
 
   const handleFileHashed = (payload: { hash: string; type: string }) => {
     console.log('[CACHE] File uploaded:', payload.type, 'with hash:', payload.hash);
@@ -106,6 +108,11 @@ export function useChapterProcessor() {
     const fileHash = lastUploadedFile.value?.hash;
     const fileType = lastUploadedFile.value?.type;
 
+    // Mostrar el spinner de carga inmediatamente para la búsqueda en caché
+    isLoading.value = true;
+    loadingMessage.value = 'Buscando en caché...';
+    startLoadingTimer();
+
     if (fileHash && fileType === 'image') {
       try {
         console.log('[CACHE] Checking cache for image:', fileHash);
@@ -114,6 +121,13 @@ export function useChapterProcessor() {
           console.log('[CACHE] Cache HIT for image:', fileHash);
           cachedPage.translations = cacheResult.data.pages[0].translations;
           cachedPage.translationStatus = 'success';
+          cacheHitCount.value = 1;
+          showCacheToast.value = true;
+          setTimeout(() => { showCacheToast.value = false; }, 3500);
+
+          // Ocultar el spinner porque ya recuperamos la traducción de la caché
+          isLoading.value = false;
+          stopLoadingTimer();
           return;
         }
       } catch (err) {
@@ -121,9 +135,8 @@ export function useChapterProcessor() {
       }
     }
 
-    isLoading.value = true;
+    // Si no hubo caché, cambiamos el mensaje de carga e iniciamos procesamiento
     loadingMessage.value = 'Procesando imagen...';
-    startLoadingTimer();
 
     try {
       const result = await processPage(imageDataUrl);
@@ -190,6 +203,9 @@ export function useChapterProcessor() {
       });
     }
 
+    // Mostrar barra de progreso inmediatamente mientras se busca en caché
+    isProcessingChapter.value = true;
+
     const fileHash = lastUploadedFile.value?.hash;
     const fileType = lastUploadedFile.value?.type;
 
@@ -197,8 +213,9 @@ export function useChapterProcessor() {
       try {
         console.log('[CACHE] Checking cache for chapter:', fileHash);
         const cacheResult = await checkCache(fileHash);
-        if (cacheResult.cached && cacheResult.data && cacheResult.data.pages.length === pages.length) {
+        if (cacheResult.cached && cacheResult.data && cacheResult.data.pages.length > 0) {
           console.log('[CACHE] Cache HIT for chapter:', fileHash);
+          let hits = 0;
           for (let i = 0; i < pages.length; i++) {
             const pageData = cacheResult.data.pages.find((p) => p.pageIndex === i);
             if (pageData) {
@@ -208,18 +225,26 @@ export function useChapterProcessor() {
                 cachedP.contexto = pageData.contexto;
                 cachedP.detectionStatus = 'success';
                 cachedP.translationStatus = 'success';
+                hits++;
               }
             }
           }
-          await nextTick();
-          return;
+          if (hits > 0) {
+            cacheHitCount.value = hits;
+            showCacheToast.value = true;
+            setTimeout(() => { showCacheToast.value = false; }, 3500);
+          }
+          if (hits === pages.length) {
+            // Ocultar barra de progreso si todas las páginas fueron resueltas por caché
+            isProcessingChapter.value = false;
+            await nextTick();
+            return;
+          }
         }
       } catch (err) {
         console.warn('[CACHE] Error checking cache:', err);
       }
     }
-
-    isProcessingChapter.value = true;
 
     await nextTick();
 
@@ -229,6 +254,36 @@ export function useChapterProcessor() {
 
   const updateProcessingStatus = () => {
     isProcessingChapter.value = isDetectingChapter.value || isTranslatingChapter.value;
+  };
+
+  /**
+   * Guarda el progreso de traducción acumulado hasta el momento de forma progresiva.
+   */
+  const saveCurrentProgress = async () => {
+    const fileHash = lastUploadedFile.value?.hash;
+    const fileType = lastUploadedFile.value?.type;
+    if (fileHash && (fileType === 'pdf' || fileType === 'zip')) {
+      const successfulPages = Array.from(pageCache.value.entries())
+        .filter(([_, page]) => page.translationStatus === 'success' && !page.hasError)
+        .map(([index, page]) => ({
+          pageIndex: index,
+          translations: page.translations,
+          contexto: page.contexto,
+        }));
+
+      if (successfulPages.length > 0) {
+        try {
+          await saveCache({
+            fileHash,
+            fileType,
+            pages: successfulPages,
+          });
+          console.log('[CACHE] Progressively saved translation results for chapter:', fileHash);
+        } catch (saveErr) {
+          console.warn('[CACHE] Error saving progressive cache for chapter:', saveErr);
+        }
+      }
+    }
   };
 
   const runDetectionChain = async () => {
@@ -339,6 +394,9 @@ export function useChapterProcessor() {
             errorMessage.value = null;
           }
           console.log('[PIPELINE] Page', i + 1, 'translation complete, translations:', result.translations.length);
+
+          // Guardar el progreso después de procesar exitosamente cada página
+          await saveCurrentProgress();
         } catch (error) {
           console.error('[PIPELINE] Error translating page', i + 1, ':', error);
           if (chapterProcessingAborted) break;
@@ -360,31 +418,8 @@ export function useChapterProcessor() {
     } finally {
       isTranslatingChapter.value = false;
       updateProcessingStatus();
-
-      const fileHash = lastUploadedFile.value?.hash;
-      const fileType = lastUploadedFile.value?.type;
-      if (fileHash && (fileType === 'pdf' || fileType === 'zip')) {
-        const allSuccessful = Array.from(pageCache.value.values()).every(
-          (page) => page.translationStatus === 'success' && !page.hasError
-        );
-        if (allSuccessful) {
-          try {
-            const cachePages = Array.from(pageCache.value.entries()).map(([index, page]) => ({
-              pageIndex: index,
-              translations: page.translations,
-              contexto: page.contexto,
-            }));
-            await saveCache({
-              fileHash,
-              fileType,
-              pages: cachePages,
-            });
-            console.log('[CACHE] Successfully saved translation results for chapter:', fileHash);
-          } catch (saveErr) {
-            console.warn('[CACHE] Error saving cache for chapter:', saveErr);
-          }
-        }
-      }
+      // Asegurar el guardado al final en el bloque finally
+      await saveCurrentProgress();
     }
   };
 
@@ -467,6 +502,8 @@ export function useChapterProcessor() {
     handleFileHashed,
     resetChapter,
     handleRetry,
-    goToPage
+    goToPage,
+    cacheHitCount,
+    showCacheToast
   };
 }

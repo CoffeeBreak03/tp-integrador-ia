@@ -36,7 +36,7 @@
 import { ref } from 'vue';
 // @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
-import { calculateFileHash } from '@/lib/hash';
+import { calculateFileHash, calculateMultipleFilesHash } from '@/lib/hash';
 
 const MAX_PAGES = 50;
 const MAX_CANVAS_WIDTH = 1200;
@@ -212,6 +212,15 @@ const handleFileUpload = async (event: Event) => {
     }
 
     const limitedFiles = sortedFiles.slice(0, MAX_PAGES);
+
+    // Calcular hash combinado para múltiples imágenes
+    try {
+      const hash = await calculateMultipleFilesHash(limitedFiles);
+      emit('fileHashed', { hash, type: 'zip' }); // Tratamos la colección como un 'zip' virtual para el caché
+    } catch (hashError) {
+      console.error('[HASH] Failed to calculate hash for multiple files:', hashError);
+    }
+
     const pages: string[] = [];
     for (const file of limitedFiles) {
       const dataUrl = await buildImageDataUrl(file);

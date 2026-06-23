@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed inset-0 z-50 flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+  <div class="fixed inset-0 z-50 flex h-[100dvh] w-[100dvw] flex-col overflow-hidden bg-slate-950 text-slate-100">
     <!-- Top Bar -->
     <div 
       class="absolute left-0 right-0 top-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent p-4 px-6 transition-transform duration-300"
@@ -41,6 +41,16 @@
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
+      </div>
+    </div>
+
+    <!-- Cache Toast -->
+    <div
+      class="pointer-events-none absolute left-1/2 top-20 z-50 flex -translate-x-1/2 transform items-center justify-center transition-all duration-500 ease-in-out"
+      :class="showCacheToast ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'"
+    >
+      <div class="rounded-full bg-blue-600 px-6 py-3 font-semibold text-white shadow-xl shadow-blue-900/20 ring-1 ring-blue-500">
+        ✨ Recuperadas {{ cacheHitCount }} página{{ cacheHitCount !== 1 ? 's' : '' }} de la caché
       </div>
     </div>
 
@@ -125,7 +135,10 @@
     </div>
 
     <!-- Floating Buttons (Right bottom) -->
-    <div class="absolute bottom-6 right-6 z-40 flex flex-col gap-3">
+    <div 
+      class="absolute bottom-6 right-6 z-40 flex flex-col gap-3 transition-all duration-300"
+      :class="isTopBarVisible ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none'"
+    >
       <button
         class="group relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-800/80 text-slate-200 shadow-lg backdrop-blur transition-colors hover:bg-slate-700 hover:text-white"
         @click="showOverlay = !showOverlay"
@@ -161,7 +174,7 @@
     <!-- Sidebars & Overlays -->
     <!-- Settings Drawer (Right) -->
     <div 
-      class="fixed inset-y-0 right-0 z-50 w-80 transform bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl transition-transform duration-300"
+      class="fixed inset-y-0 right-0 z-50 w-full sm:w-80 h-[100dvh] transform bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl transition-transform duration-300"
       :class="activePanel === 'settings' ? 'translate-x-0' : 'translate-x-full'"
     >
       <div class="mb-6 flex items-center justify-between">
@@ -234,7 +247,7 @@
         activePanel === 'translations' 
           ? 'translate-y-0 md:translate-x-0' 
           : 'translate-y-full md:translate-y-0 md:translate-x-full',
-        'inset-x-0 bottom-0 h-[50vh] md:h-full md:bottom-auto md:left-auto md:top-0'
+        'inset-x-0 bottom-0 h-[50dvh] md:h-[100dvh] md:bottom-auto md:left-auto md:top-0'
       ]"
     >
       <!-- Bottom sheet drag handle (mobile only) -->
@@ -283,7 +296,9 @@ const {
   pageCache,
   currentPageIndex,
   isProcessingChapter,
-  goToPage
+  goToPage,
+  cacheHitCount,
+  showCacheToast
 } = processor;
 
 // --- Local State (Persisted) ---
@@ -301,7 +316,9 @@ const setSavedPref = (key: string, val: any) => {
 
 const layoutMode = ref<'single' | 'cascade' | 'double'>(getSavedPref('layout', 'single'));
 const readingDirection = ref<'rtl' | 'ltr'>(getSavedPref('direction', 'rtl'));
-const fitMode = ref<'height' | 'width'>(getSavedPref('fit', 'height'));
+const isMobileInitial = typeof window !== 'undefined' && window.innerWidth < 768;
+const defaultFit = isMobileInitial ? 'width' : 'height';
+const fitMode = ref<'height' | 'width'>(getSavedPref('fit', defaultFit));
 const zoomPercent = ref<number>(Math.max(100, getSavedPref('zoom', 100)));
 const doublePageCover = ref<boolean>(getSavedPref('doubleCover', true));
 const showOverlay = ref<boolean>(getSavedPref('overlay', true));

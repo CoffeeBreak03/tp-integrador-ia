@@ -3,3 +3,11 @@ node_modules
 # Local Netlify folder
 .netlify
 .env
+
+# Build outputs
+dist
+frontend/dist
+functions/dist
+
+# Local cache
+functions/cache/
