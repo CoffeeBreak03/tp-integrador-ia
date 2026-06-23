@@ -234,3 +234,64 @@ export async function translatePageWithBoxes(
     throw error;
   }
 }
+
+export interface CacheCheckResponse {
+  cached: boolean;
+  data?: {
+    fileHash: string;
+    fileType: string;
+    pages: Array<{
+      pageIndex: number;
+      translations: TranslationContract[];
+      contexto: string;
+    }>;
+  };
+}
+
+export interface CacheSaveRequest {
+  fileHash: string;
+  fileType: string;
+  pages: Array<{
+    pageIndex: number;
+    translations: TranslationContract[];
+    contexto: string;
+  }>;
+}
+
+/**
+ * Consulta en el backend si existe caché para el hash del archivo provisto.
+ */
+export async function checkCache(fileHash: string): Promise<CacheCheckResponse> {
+  const response = await fetch('/api/cache/check', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fileHash }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error((errorData as any).error || `Error checking cache: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Guarda las traducciones del archivo procesado en la caché del backend.
+ */
+export async function saveCache(cacheData: CacheSaveRequest): Promise<void> {
+  const response = await fetch('/api/cache/save', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(cacheData),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error((errorData as any).error || `Error saving cache: ${response.statusText}`);
+  }
+}

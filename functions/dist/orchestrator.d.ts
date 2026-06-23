@@ -1,8 +1,13 @@
 import { AzureClient } from './lib/azure-client';
-import { PageProcessResult } from './types/contract';
+import { VisionOutput, PageProcessResult } from './types/contract';
 export declare class PipelineOrchestrator {
     private azureClient;
     constructor(azureClient: AzureClient);
+    detectTextBubblesOnly(imageBase64: string): Promise<VisionOutput>;
+    translatePageOnly(croppedBubbles: Array<{
+        id: number;
+        base64: string;
+    }>, boxes: VisionOutput['boxes'], contexto?: string): Promise<PageProcessResult>;
     processMangaImage(imageBase64: string, contexto?: string): Promise<PageProcessResult>;
     /**
      * Ordena recursivamente las cajas de texto en orden de lectura de manga:
