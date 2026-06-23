@@ -106,11 +106,11 @@
             @click="onImageClick"
           >
               <OverlayRenderer
-                :pageIndex="i"
+                :pageIndex="Number(i)"
                 :imageData="page"
-                :translations="visiblePages.has(Number(i)) ? (pageCache.get(i)?.translations || []) : []"
+                :translations="visiblePages.has(Number(i)) ? (pageCache.get(Number(i))?.translations || []) : []"
                 :showOverlay="showOverlay"
-                :isLoading="isProcessingChapter && pageCache.get(i)?.translationStatus !== 'success' && !pageCache.get(i)?.hasError"
+                :isLoading="isProcessingChapter && pageCache.get(Number(i))?.translationStatus !== 'success' && !pageCache.get(Number(i))?.hasError"
                 :fitMode="fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
