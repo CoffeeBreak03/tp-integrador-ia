@@ -524,7 +524,10 @@ const pageContainerStyle = computed(() => {
   if (fitMode.value === 'height') {
     return { height: `${effectiveZoom.value}vh`, width: 'auto' };
   } else {
-    return { width: '100vw', maxWidth: '1200px', height: 'auto' };
+    if (layoutMode.value === 'double') {
+      return { width: 'calc(50% - 2px)', height: 'auto' };
+    }
+    return { width: '100%', maxWidth: '1200px', height: 'auto' };
   }
 });
 
@@ -532,7 +535,7 @@ const doubleContainerStyle = computed(() => {
   if (fitMode.value === 'height') {
     return { height: `${effectiveZoom.value}vh` };
   } else {
-    return { width: '100vw', maxWidth: '1200px' };
+    return { width: '100%', maxWidth: '1200px' };
   }
 });
 
