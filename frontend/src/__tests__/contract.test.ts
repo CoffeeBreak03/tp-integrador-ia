@@ -36,4 +36,17 @@ describe('Contract validation', () => {
 
     expect(validateContract(validFloat)).toBe(true);
   });
+
+  it('accepts 1-character length translations', () => {
+    const validSingleChar = [
+      {
+        id: 1,
+        box: [100, 120, 240, 360],
+        texto_original: 'あ',
+        texto_traducido: 'A',
+      },
+    ];
+
+    expect(validateContract(validSingleChar)).toBe(true);
+  });
 });

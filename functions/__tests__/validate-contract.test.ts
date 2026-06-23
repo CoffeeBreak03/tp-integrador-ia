@@ -17,13 +17,26 @@ describe('Contract validation', () => {
     it('excludes an invalid translation contract', () => {
         const invalidContract = [
             {
-                id: 0,
-                box: [100, 120, 240],
-                texto_original: '',
-                texto_traducido: '',
+                id: 0, // Invalid ID
+                box: [100, 120, 240], // Invalid box array
+                texto_original: '', // Invalid text
+                texto_traducido: '', // Invalid text
             },
         ];
 
         expect(validateTranslationContract(invalidContract)).toEqual([]);
+    });
+
+    it('accepts a translation contract with 1-character text', () => {
+        const singleCharContract = [
+            {
+                id: 2,
+                box: [100, 120, 240, 360],
+                texto_original: 'あ',
+                texto_traducido: 'A',
+            },
+        ];
+
+        expect(validateTranslationContract(singleCharContract)).toEqual(singleCharContract);
     });
 });

@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <!-- Dashboard / Landing -->
     <div class="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
       <header class="space-y-3">
         <div class="flex items-center justify-between gap-3">
@@ -27,37 +28,28 @@
       <main class="space-y-5">
         <section class="space-y-4">
           <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/80">
-            <div v-if="errorMessage" class="mb-4 rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300">
-              <p class="font-semibold">
-                {{ isTimeoutError ? 'Tiempo de espera agotado (Timeout):' : 'Error al procesar la imagen:' }}
-              </p>
-              <p class="mt-1">
-                {{ isTimeoutError ? 'El servicio remoto tardó demasiado en responder. Esto suele suceder por un encendido en frío del servidor de Hugging Face. Puedes intentar procesarla nuevamente.' : errorMessage }}
-              </p>
-              
-              <!-- Botón de reintento manual solo para timeouts -->
-              <div v-if="isTimeoutError" class="mt-3">
-                <button
-                  type="button"
-                  @click="handleRetry"
-                  class="rounded-full border border-red-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-red-700 shadow-sm transition hover:bg-red-50 focus:outline-none dark:border-red-700 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-slate-800"
-                >
-                  Reintentar procesamiento
-                </button>
-              </div>
+             
+            <!-- Vista cuando hay un archivo cargado pero el visor está cerrado -->
+            <div v-if="hasLoadedContent" class="flex flex-col items-center justify-center p-10 space-y-6">
+               <p class="text-lg font-medium text-slate-600 dark:text-slate-400">Tienes un archivo procesándose o listo para leer.</p>
+               <div class="flex flex-wrap justify-center gap-4">
+                 <button @click="isReaderOpen = true" class="rounded-full bg-blue-600 px-6 py-3 font-semibold text-white shadow hover:bg-blue-500 transition-colors">
+                    Continuar leyendo
+                 </button>
+                 <button @click="onReset" class="rounded-full border border-slate-300 px-6 py-3 font-semibold hover:bg-slate-200 transition-colors dark:border-slate-700 dark:hover:bg-slate-800">
+                    Cargar otro archivo
+                 </button>
+               </div>
             </div>
 
-            <div v-if="isLoading && !isChapterMode" class="mb-4 rounded-2xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              <div class="flex items-center gap-2">
-                <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600"></div>
-                <div class="flex-1">
-                  <p class="font-semibold">{{ loadingMessage }}</p>
-                  <p class="mt-1 text-xs opacity-75">Tiempo: {{ loadingElapsedSeconds }}s</p>
-                </div>
-              </div>
-              <div class="mt-3 h-1 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900">
-                <div class="h-full animate-pulse bg-blue-400" style="width: 100%"></div>
-              </div>
+            <!-- Upload Area (solo visible cuando no hay nada cargado) -->
+            <div v-else class="relative mx-auto max-w-2xl">
+               <ImageUploader
+                 ref="imageUploader"
+                 @update:imageData="onSingleImageUploaded"
+                 @chapterLoaded="onChapterUploaded"
+                 @fileHashed="handleFileHashed"
+               />
             </div>
 
             <!-- Barra de progreso del capítulo -->
@@ -79,123 +71,28 @@
               </div>
             </div>
 
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div class="space-x-2">
-                <button
-                  type="button"
-                  @click="showOverlay = !showOverlay"
-                  :disabled="isLoading && !isChapterMode"
-                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
-                >
-                  {{ showOverlay ? 'Ocultar overlays' : 'Mostrar overlays' }}
-                </button>
-                <button
-                  type="button"
-                  @click="showTranslations = !showTranslations"
-                  :disabled="isLoading && !isChapterMode"
-                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
-                >
-                  {{ showTranslations ? 'Ocultar lista' : 'Mostrar lista' }}
-                </button>
-                <button
-                  type="button"
-                  @click="isFitToScreen = !isFitToScreen"
-                  :disabled="isLoading && !isChapterMode"
-                  class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
-                >
-                  {{ isFitToScreen ? 'Restaurar tamaño' : 'Ajustar tamaño' }}
-                </button>
-              </div>
-            </div>
 
-            <!-- Navegación de páginas (solo en modo capítulo) -->
-            <PageNavigator
-              v-if="isChapterMode"
-              class="mt-4"
-              :currentPage="currentPageIndex + 1"
-              :totalPages="chapterPages.length"
-              :isCurrentPageLoading="isCurrentPageLoading"
-              :processedPages="processedPagesCount"
-              @goToPage="goToPage"
-            />
-
-            <div class="relative mt-4 overflow-hidden rounded-3xl bg-slate-100 p-4 dark:bg-slate-950">
-              <div class="relative mx-auto flex max-w-6xl justify-center">
-                <div
-                  ref="centerContainer"
-                  class="w-full max-w-4xl transition-transform duration-300"
-                  :style="centerStyle"
-                >
-                  <div class="relative" style="transform-origin: right bottom;">
-                    <ImageUploader
-                      ref="imageUploader"
-                      :imageData="currentImageData"
-                      @update:imageData="handleSingleImage"
-                      @chapterLoaded="handleChapterLoaded"
-                      @fileHashed="handleFileHashed"
-                    />
-
-                    <OverlayRenderer
-                      v-if="currentImageData"
-                      :imageData="currentImageData"
-                      :translations="currentTranslations"
-                      :selectedItemId="selectedItemId"
-                      :hoveredItemId="hoveredItemId"
-                      :showOverlay="showOverlay"
-                      :fitToScreen="isFitToScreen"
-                      :isLoading="isCurrentPageLoading"
-                      @selectBox="handleBoxClick"
-                    />
-                  </div>
-
-                  <!-- Navegación de páginas inferior (solo en modo capítulo) -->
-                  <PageNavigator
-                    v-if="isChapterMode"
-                    class="mt-4"
-                    :currentPage="currentPageIndex + 1"
-                    :totalPages="chapterPages.length"
-                    :isCurrentPageLoading="isCurrentPageLoading"
-                    :processedPages="processedPagesCount"
-                    @goToPage="goToPageAndScrollUp"
-                  />
-
-                  <div v-if="currentImageData" class="mt-4 flex justify-center">
-                    <button
-                      type="button"
-                      @click="openExplorer"
-                      :disabled="isLoading && !isChapterMode"
-                      class="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400"
-                    >
-                      Cargar otro archivo
-                    </button>
-                  </div>
-                </div>
-
-                <aside
-                  ref="asidePanel"
-                  class="pointer-events-none absolute right-0 top-0 h-full w-80 overflow-auto transition-transform duration-300"
-                  :class="showTranslations ? 'pointer-events-auto translate-x-0' : 'translate-x-full'"
-                >
-                  <TranslationPanel
-                    v-if="currentTranslations.length"
-                    :translations="currentTranslations"
-                    :selectedItemId="selectedItemId"
-                    :hoveredItemId="hoveredItemId"
-                    @selectItem="highlightItem"
-                    @hoverItem="handleHoverItem"
-                  />
-                </aside>
-              </div>
-            </div>
           </div>
         </section>
       </main>
     </div>
+
+    <!-- The Focus Mode Reader -->
+    <Transition name="fade">
+      <MangaReader
+        v-if="hasLoadedContent && isReaderOpen"
+        :fileName="loadedFileName"
+        @close="isReaderOpen = false"
+      />
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, watch, nextTick, onUnmounted } from 'vue';
+import { ref, onMounted, provide } from 'vue';
+import ImageUploader from '@/components/ImageUploader.vue';
+import MangaReader from '@/components/MangaReader.vue';
+import { useChapterProcessor } from '@/composables/useChapterProcessor';
 
 // --- Dark mode ---
 const isDark = ref(false);
@@ -211,603 +108,58 @@ const applyDark = (value: boolean) => {
 };
 
 const toggleDark = () => applyDark(!isDark.value);
-import ImageUploader from '@/components/ImageUploader.vue';
-import OverlayRenderer from '@/components/OverlayRenderer.vue';
-import TranslationPanel from '@/components/TranslationPanel.vue';
-import PageNavigator from '@/components/PageNavigator.vue';
-import { TranslationContract, VisionBox } from '@/lib/contract';
-import { processPage, detectPage, translatePageWithBoxes, checkCache, saveCache } from '@/lib/api';
-
-// --- Refs del DOM ---
-const imageUploader = ref<{ openExplorer: () => void } | null>(null);
-const centerContainer = ref<HTMLElement | null>(null);
-const asidePanel = ref<HTMLElement | null>(null);
-
-// --- Estado común ---
-const selectedItemId = ref<number | undefined>(undefined);
-const hoveredItemId = ref<number | undefined>(undefined);
-const showOverlay = ref(true);
-const showTranslations = ref(false);
-const isFitToScreen = ref(false);
-const isLoading = ref(false);
-const errorMessage = ref<string | null>(null);
-const loadingElapsedSeconds = ref(0);
-const loadingMessage = ref('Procesando imagen...');
-let loadingTimer: number | null = null;
-let loadingStartTime: number | null = null;
-
-// --- Estado de imagen individual (legacy) ---
-const singleImageData = ref('');
-const singleTranslations = ref<TranslationContract[]>([]);
-
-// --- Estado del capítulo (multi-página) ---
-interface QueueItem {
-  index: number;
-  priority: number;
-}
-const chapterPages = ref<string[]>([]);
-const chapterQueue = ref<QueueItem[]>([]);
-const currentPageIndex = ref(0);
-const chapterContext = ref('');
-const isProcessingChapter = ref(false);
-let chapterProcessingAborted = false;
-
-// --- Estado de la caché ---
-const lastUploadedFile = ref<{ hash: string; type: string } | null>(null);
-
-const handleFileHashed = (payload: { hash: string; type: string }) => {
-  console.log('[CACHE] File uploaded:', payload.type, 'with hash:', payload.hash);
-  lastUploadedFile.value = payload;
-};
-
-interface CachedPage {
-  translations: TranslationContract[];
-  contexto: string;
-  boxes?: VisionBox[];
-  croppedBubbles?: Array<{ id: number; base64: string }>;
-  detectionStatus: 'idle' | 'loading' | 'success' | 'error';
-  translationStatus: 'idle' | 'loading' | 'success' | 'error';
-  hasError?: boolean;
-  errorType?: 'timeout' | 'other';
-  errorMessage?: string;
-}
-const pageCache = ref<Map<number, CachedPage>>(new Map());
-const pagesInProcess = ref<Set<number>>(new Set());
-
-// --- Computed ---
-const isChapterMode = computed(() => chapterPages.value.length > 1);
-
-const isTimeoutError = computed(() => {
-  if (!errorMessage.value) return false;
-  return /500|502|504|timeout|limit/i.test(errorMessage.value);
-});
-
-const currentImageData = computed(() => {
-  if (isChapterMode.value) {
-    return chapterPages.value[currentPageIndex.value] ?? '';
-  }
-  return singleImageData.value;
-});
-
-const currentTranslations = computed(() => {
-  if (isChapterMode.value) {
-    const cached = pageCache.value.get(currentPageIndex.value);
-    return cached?.translations ?? [];
-  }
-  return singleTranslations.value;
-});
-
-const isCurrentPageLoading = computed(() => {
-  if (isChapterMode.value) {
-    const idx = currentPageIndex.value;
-    const cached = pageCache.value.get(idx);
-    if (!cached) return false;
-    return cached.detectionStatus === 'loading' || cached.translationStatus === 'loading';
-  }
-  return isLoading.value;
-});
-
-const processedPagesCount = computed(() => {
-  // Solo contar páginas que terminaron con éxito (no tienen error y tienen traducción exitosa)
-  let count = 0;
-  for (const page of pageCache.value.values()) {
-    if (page.translationStatus === 'success' && !page.hasError) count++;
-  }
-  return count;
-});
-
-// --- Escala del contenedor ---
-const scale = ref(1);
-
-const centerStyle = computed(() => ({
-  transform: `scale(${scale.value})`,
-  transformOrigin: 'right bottom',
-  transition: 'transform 300ms ease'
-}));
-
-const recalcScale = () => {
-  const center = centerContainer.value;
-  if (!center) return;
-
-  const parent = center.parentElement ?? center;
-  const parentWidth = parent.getBoundingClientRect().width;
-  const centerRect = center.getBoundingClientRect();
-  const available = parentWidth;
-  let s = available / centerRect.width;
-  if (!isFinite(s) || s <= 0) s = 1;
-  if (s > 1) s = 1;
-  if (s < 0.5) s = 0.5;
-  scale.value = s;
-};
-
-// --- Procesamiento de imagen individual ---
-const startLoadingTimer = () => {
-  loadingElapsedSeconds.value = 0;
-  loadingStartTime = Date.now();
-  loadingTimer = window.setInterval(() => {
-    if (loadingStartTime) {
-      loadingElapsedSeconds.value = Math.floor((Date.now() - loadingStartTime) / 1000);
-    }
-  }, 1000);
-};
-
-const stopLoadingTimer = () => {
-  if (loadingTimer) clearInterval(loadingTimer);
-  loadingTimer = null;
-};
-
-const handleSingleImage = async (imageDataUrl: string) => {
-  // Resetear modo capítulo
-  resetChapter();
-  singleImageData.value = imageDataUrl;
-  singleTranslations.value = [];
-  selectedItemId.value = undefined;
-  errorMessage.value = null;
-
-  if (!imageDataUrl) return;
-
-  const fileHash = lastUploadedFile.value?.hash;
-  const fileType = lastUploadedFile.value?.type;
-
-  // Intentar cargar desde la caché si coincide con una imagen individual
-  if (fileHash && fileType === 'image') {
-    try {
-      console.log('[CACHE] Checking cache for image:', fileHash);
-      const cacheResult = await checkCache(fileHash);
-      if (cacheResult.cached && cacheResult.data && cacheResult.data.pages.length > 0) {
-        console.log('[CACHE] Cache HIT for image:', fileHash);
-        singleTranslations.value = cacheResult.data.pages[0].translations;
-        return;
-      }
-    } catch (err) {
-      console.warn('[CACHE] Error checking cache:', err);
-    }
-  }
-
-  isLoading.value = true;
-  loadingMessage.value = 'Procesando imagen...';
-  startLoadingTimer();
-
-  try {
-    const result = await processPage(imageDataUrl);
-    singleTranslations.value = result.translations || [];
-
-    // Guardar en la caché tras el procesamiento exitoso
-    if (fileHash && fileType === 'image' && singleTranslations.value.length > 0) {
-      try {
-        await saveCache({
-          fileHash,
-          fileType: 'image',
-          pages: [
-            {
-              pageIndex: 0,
-              translations: singleTranslations.value,
-              contexto: ''
-            }
-          ]
-        });
-        console.log('[CACHE] Successfully saved translation results for image:', fileHash);
-      } catch (saveErr) {
-        console.warn('[CACHE] Error saving cache for image:', saveErr);
-      }
-    }
-  } catch (error) {
-    errorMessage.value = error instanceof Error
-      ? error.message
-      : 'Error desconocido al procesar la imagen';
-    singleTranslations.value = [];
-  } finally {
-    isLoading.value = false;
-    stopLoadingTimer();
-  }
-};
-
-// --- Procesamiento de capítulo (multi-página) ---
-const isDetectingChapter = ref(false);
-const isTranslatingChapter = ref(false);
-
-const resetChapter = () => {
-  chapterProcessingAborted = true;
-  chapterPages.value = [];
-  currentPageIndex.value = 0;
-  chapterContext.value = '';
-  pageCache.value = new Map();
-  pagesInProcess.value = new Set();
-  isProcessingChapter.value = false;
-  isDetectingChapter.value = false;
-  isTranslatingChapter.value = false;
-};
-
-const handleChapterLoaded = async (pages: string[]) => {
-  // Resetear estado anterior
-  resetChapter();
-  singleImageData.value = '';
-  singleTranslations.value = [];
-  errorMessage.value = null;
-  selectedItemId.value = undefined;
-
-  // Cargar nuevas páginas
-  chapterProcessingAborted = false;
-  chapterPages.value = pages;
-  currentPageIndex.value = 0;
-
-  // Inicializar caché con estados idle
-  for (let i = 0; i < pages.length; i++) {
-    pageCache.value.set(i, {
-      translations: [],
-      contexto: '',
-      boxes: [],
-      croppedBubbles: [],
-      detectionStatus: 'idle',
-      translationStatus: 'idle',
-    });
-  }
-
-  const fileHash = lastUploadedFile.value?.hash;
-  const fileType = lastUploadedFile.value?.type;
-
-  // Intentar cargar desde la caché si coincide con un PDF o ZIP
-  if (fileHash && (fileType === 'pdf' || fileType === 'zip')) {
-    try {
-      console.log('[CACHE] Checking cache for chapter:', fileHash);
-      const cacheResult = await checkCache(fileHash);
-      if (cacheResult.cached && cacheResult.data && cacheResult.data.pages.length === pages.length) {
-        console.log('[CACHE] Cache HIT for chapter:', fileHash);
-        for (let i = 0; i < pages.length; i++) {
-          const pageData = cacheResult.data.pages.find((p) => p.pageIndex === i);
-          if (pageData) {
-            pageCache.value.set(i, {
-              translations: pageData.translations,
-              contexto: pageData.contexto,
-              boxes: [],
-              croppedBubbles: [],
-              detectionStatus: 'success',
-              translationStatus: 'success',
-            });
-          }
-        }
-        await nextTick();
-        recalcScale();
-        return;
-      }
-    } catch (err) {
-      console.warn('[CACHE] Error checking cache:', err);
-    }
-  }
-
-  isProcessingChapter.value = true;
-
-  await nextTick();
-  recalcScale();
-
-  // Iniciar el pipeline en cadena
-  runDetectionChain();
-  runTranslationChain();
-};
-
-const runDetectionChain = async () => {
-  if (isDetectingChapter.value) return;
-  isDetectingChapter.value = true;
-  updateProcessingStatus();
-
-  try {
-    for (let i = 0; i < chapterPages.value.length; i++) {
-      if (chapterProcessingAborted) break;
-
-      const cached = pageCache.value.get(i);
-      if (!cached) continue;
-
-      // Si ya se detectó exitosamente, saltar
-      if (cached.detectionStatus === 'success') {
-        continue;
-      }
-
-      cached.detectionStatus = 'loading';
-
-      try {
-        console.log('[PIPELINE] Detecting page', i + 1);
-        const result = await detectPage(chapterPages.value[i]);
-        if (chapterProcessingAborted) break;
-
-        cached.boxes = result.boxes;
-        cached.croppedBubbles = result.croppedBubbles;
-        cached.detectionStatus = 'success';
-        console.log('[PIPELINE] Page', i + 1, 'detection complete, boxes:', result.boxes.length);
-
-        // Intentar disparar el loop de traducción, ya que ahora esta página tiene cajas
-        triggerTranslationStep();
-      } catch (error) {
-        console.error('[PIPELINE] Error detecting page', i + 1, ':', error);
-        if (chapterProcessingAborted) break;
-
-        const msg = error instanceof Error ? error.message : String(error);
-        const isTimeout = /502|504|timeout|limit/i.test(msg);
-
-        cached.detectionStatus = 'error';
-        cached.hasError = true;
-        cached.errorType = isTimeout ? 'timeout' : 'other';
-        cached.errorMessage = msg;
-
-        if (i === currentPageIndex.value) {
-          errorMessage.value = msg;
-        }
-
-        // Aunque falle la detección, dejamos que la cadena continúe con las otras páginas
-      }
-    }
-  } finally {
-    isDetectingChapter.value = false;
-    updateProcessingStatus();
-  }
-};
-
-const runTranslationChain = async () => {
-  if (isTranslatingChapter.value) return;
-  isTranslatingChapter.value = true;
-  updateProcessingStatus();
-
-  try {
-    for (let i = 0; i < chapterPages.value.length; i++) {
-      if (chapterProcessingAborted) break;
-
-      const cached = pageCache.value.get(i);
-      if (!cached) continue;
-
-      // Si ya está traducido, pasar
-      if (cached.translationStatus === 'success') {
-        continue;
-      }
-
-      // Si falló y no estamos reintentándolo, pasamos a la siguiente página (continue)
-      // para que el proceso no se corte.
-      if (cached.translationStatus === 'error') {
-        continue;
-      }
-
-      // Condición de sincronización: Las cajas de detección deben estar listas
-      if (cached.detectionStatus !== 'success') {
-        if (cached.detectionStatus === 'error') {
-          // Si la detección falló con error, la saltamos para no bloquear las siguientes páginas
-          continue;
-        }
-        // Rompemos el loop de traducción secuencial aquí (si está en 'idle' o 'loading').
-        // Se reanudará cuando triggerTranslationStep sea llamado tras completarse la detección de esta página.
-        break;
-      }
-
-      // Obtener el último contexto válido buscando hacia atrás
-      let prevContext = '';
-      if (i > 0) {
-        const prevPage = pageCache.value.get(i - 1);
-        if (!prevPage || prevPage.translationStatus !== 'success') {
-          // Si la página anterior falló, buscamos hacia atrás el último contexto exitoso
-          for (let prev = i - 1; prev >= 0; prev--) {
-            const p = pageCache.value.get(prev);
-            if (p && p.translationStatus === 'success' && p.contexto) {
-              prevContext = p.contexto;
-              break;
-            }
-          }
-        } else {
-          prevContext = prevPage.contexto;
-        }
-      }
-
-      cached.translationStatus = 'loading';
-
-      try {
-        console.log('[PIPELINE] Translating page', i + 1, 'with context length:', prevContext.length);
-        const result = await translatePageWithBoxes(
-          cached.croppedBubbles || [],
-          cached.boxes || [],
-          prevContext || undefined
-        );
-
-        if (chapterProcessingAborted) break;
-
-        cached.translations = result.translations;
-        cached.contexto = result.contexto;
-        cached.translationStatus = 'success';
-        cached.hasError = false;
-        cached.errorMessage = undefined;
-
-        if (i === currentPageIndex.value) {
-          errorMessage.value = null;
-        }
-        console.log('[PIPELINE] Page', i + 1, 'translation complete, translations:', result.translations.length);
-      } catch (error) {
-        console.error('[PIPELINE] Error translating page', i + 1, ':', error);
-        if (chapterProcessingAborted) break;
-
-        const msg = error instanceof Error ? error.message : String(error);
-        const isTimeout = /502|504|timeout|limit/i.test(msg);
-
-        cached.translationStatus = 'error';
-        cached.hasError = true;
-        cached.errorType = isTimeout ? 'timeout' : 'other';
-        cached.errorMessage = msg;
-
-        if (i === currentPageIndex.value) {
-          errorMessage.value = msg;
-        }
-
-        // Si falla la traducción, no detenemos la cola; permitimos que las siguientes continúen
-        // usando el último contexto exitoso encontrado.
-        continue;
-      }
-    }
-  } finally {
-    isTranslatingChapter.value = false;
-    updateProcessingStatus();
-
-    // Guardar en la caché del backend si todas las páginas del capítulo se tradujeron con éxito
-    const fileHash = lastUploadedFile.value?.hash;
-    const fileType = lastUploadedFile.value?.type;
-    if (fileHash && (fileType === 'pdf' || fileType === 'zip')) {
-      const allSuccessful = Array.from(pageCache.value.values()).every(
-        (page) => page.translationStatus === 'success' && !page.hasError
-      );
-      if (allSuccessful) {
-        try {
-          const cachePages = Array.from(pageCache.value.entries()).map(([index, page]) => ({
-            pageIndex: index,
-            translations: page.translations,
-            contexto: page.contexto,
-          }));
-          await saveCache({
-            fileHash,
-            fileType,
-            pages: cachePages,
-          });
-          console.log('[CACHE] Successfully saved translation results for chapter:', fileHash);
-        } catch (saveErr) {
-          console.warn('[CACHE] Error saving cache for chapter:', saveErr);
-        }
-      }
-    }
-  }
-};
-
-const triggerTranslationStep = () => {
-  if (!chapterProcessingAborted) {
-    runTranslationChain();
-  }
-};
-
-const updateProcessingStatus = () => {
-  isProcessingChapter.value = isDetectingChapter.value || isTranslatingChapter.value;
-};
-
-const handleRetry = async () => {
-  if (isChapterMode.value) {
-    const idx = currentPageIndex.value;
-    console.log('[RETRY] Retrying page', idx + 1);
-
-    const cached = pageCache.value.get(idx);
-    if (!cached) return;
-
-    errorMessage.value = null;
-
-    // Si falló la detección (o no hay cajas precalculadas)
-    if (cached.detectionStatus === 'error' || !cached.boxes || cached.boxes.length === 0) {
-      cached.detectionStatus = 'idle';
-      cached.translationStatus = 'idle';
-      cached.hasError = false;
-      isProcessingChapter.value = true;
-      runDetectionChain();
-      runTranslationChain();
-    } else {
-      // Si la detección fue exitosa pero falló la traducción
-      cached.translationStatus = 'idle';
-      cached.hasError = false;
-      isProcessingChapter.value = true;
-      runTranslationChain();
-    }
-  } else {
-    handleSingleImage(singleImageData.value);
-  }
-};
-
-// --- Navegación de páginas ---
-const goToPage = (pageNumber: number) => {
-  const idx = pageNumber - 1;
-  if (idx < 0 || idx >= chapterPages.value.length) return;
-
-  currentPageIndex.value = idx;
-  selectedItemId.value = undefined;
-
-  // Restaurar error si la página destino falló
-  const cached = pageCache.value.get(idx);
-  if (cached && cached.hasError) {
-    errorMessage.value = cached.errorMessage || 'Error desconocido';
-  } else {
-    errorMessage.value = null;
-  }
-};
-
-const goToPageAndScrollUp = (pageNumber: number) => {
-  goToPage(pageNumber);
-  nextTick(() => {
-    const el = centerContainer.value;
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  });
-};
-
-// --- Watchers ---
-watch(currentImageData, async () => {
-  await nextTick();
-  recalcScale();
-});
-
-// --- Lifecycle ---
 onMounted(() => {
   const saved = localStorage.getItem('theme');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   applyDark(saved === 'dark' || (!saved && prefersDark));
-
-  recalcScale();
-  window.addEventListener('resize', recalcScale);
 });
 
-onUnmounted(() => {
-  window.removeEventListener('resize', recalcScale);
-  stopLoadingTimer();
-  chapterProcessingAborted = true;
-});
+// --- Pipeline ---
+const processor = useChapterProcessor();
+// Compartimos todo el estado del pipeline para que MangaReader lo consuma sin prop drilling
+provide('chapterProcessor', processor);
 
-// --- Handlers de UI ---
-const highlightItem = (item: TranslationContract) => {
-  selectedItemId.value = item.id;
-  nextTick(() => {
-    const el = document.getElementById(`translation-box-${item.id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  });
+const { 
+  hasLoadedContent, 
+  resetChapter, 
+  handleSingleImage, 
+  handleChapterLoaded,
+  handleFileHashed,
+  isChapterMode,
+  isProcessingChapter,
+  processedPagesCount,
+  chapterPages
+} = processor;
+
+// --- App State ---
+const isReaderOpen = ref(false);
+const loadedFileName = ref<string>('');
+const imageUploader = ref<{ openExplorer: () => void } | null>(null);
+
+const onSingleImageUploaded = (dataUrl: string) => {
+  loadedFileName.value = 'Imagen individual';
+  handleSingleImage(dataUrl);
+  isReaderOpen.value = true;
 };
 
-const handleHoverItem = (id: number | undefined) => {
-  hoveredItemId.value = id;
+const onChapterUploaded = (pages: string[]) => {
+  loadedFileName.value = `Capítulo de ${pages.length} páginas`;
+  handleChapterLoaded(pages);
+  isReaderOpen.value = true;
 };
 
-const handleBoxClick = async (item: TranslationContract) => {
-  selectedItemId.value = item.id;
-  const wasClosed = !showTranslations.value;
-  if (wasClosed) {
-    showTranslations.value = true;
-    await nextTick();
-  }
-  setTimeout(() => {
-    const el = document.getElementById(`translation-item-${item.id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, wasClosed ? 300 : 50);
-};
-
-const openExplorer = () => {
-  imageUploader.value?.openExplorer();
+const onReset = () => {
+  resetChapter();
 };
 </script>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

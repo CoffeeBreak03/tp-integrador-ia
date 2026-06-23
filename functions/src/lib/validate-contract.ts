@@ -17,8 +17,8 @@ const isTranslationBox = (value: any): value is TranslationBox => {
         console.error(`[VALIDATION] box coordinates are invalid for id ${value.id}. Must be between 0 and 1000. Got:`, value.box);
         return false;
     }
-    if (typeof value.texto_original !== 'string' || value.texto_original.trim().length <= 1) {
-        console.error(`[VALIDATION] texto_original is empty or <= 1 char for id ${value.id}. Got: "${value.texto_original}"`);
+    if (typeof value.texto_original !== 'string' || value.texto_original.trim().length === 0) {
+        console.error(`[VALIDATION] texto_original is empty for id ${value.id}. Got: "${value.texto_original}"`);
         return false;
     }
     if (typeof value.texto_traducido !== 'string' || value.texto_traducido.trim().length === 0) {
