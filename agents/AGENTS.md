@@ -210,12 +210,17 @@ Cuando se carga un capítulo, el composable [useChapterProcessor.ts](../frontend
 6. Si el error fue un **timeout o cold start** (detectado por errores 500, 502, 504 o palabras clave relacionadas a Hugging Face), se le muestra al usuario una advertencia y un botón de **Reintentar procesamiento**.
 7. Al hacer clic en reintentar, se remueve el error de la caché y se agrega el índice de la página nuevamente a la cola de prioridad `chapterQueue` con prioridad alta (`priority: 1`). Esto asegura que se procese con prioridad inmediata (justo después de que termine la página actualmente en proceso) frente a las páginas restantes de prioridad estándar (`priority: 0`). Si el trabajador no estaba activo, se dispara de nuevo.
 8. El cliente HTTP ([api.ts](../frontend/src/lib/api.ts)) implementa reintentos automáticos (máximo 3) con backoff exponencial antes de propagar un fallo al cliente.
+9. **Indicador de Procesamiento (Spinner)**: Se muestra un spinner de carga no solo en la página activa que se está traduciendo, sino en todas las páginas del capítulo cuyo procesamiento esté en cola o en progreso (`translationStatus !== 'success' && !hasError`), brindando feedback visual claro sobre el estado del lote completo.
 
 ### 5.7. Visor Inmersivo (Modo Enfoque) y Layouts de Lectura
 El componente [MangaReader.vue](../frontend/src/components/MangaReader.vue) ofrece una experiencia de lectura fluida a pantalla completa (100vw/100vh) que consume el estado reactivo del pipeline mediante `provide/inject`:
 - **Layouts soportados**: `Simple` (1 página), `Doble` (2 páginas emulando libro físico con soporte RTL/LTR y opción de página portada sola), y `Cascada` (scroll vertical continuo).
-- **Lazy Render**: En el modo cascada, utiliza `IntersectionObserver` para renderizar los overlays de texto únicamente en las páginas visibles (+1 de buffer), optimizando drásticamente el rendimiento del DOM en capítulos largos.
-- **Navegación Táctil/Teclado**: Atajos de teclado (flechas, espacio) y tap zones (tercios izquierdo/central/derecho) para navegar y mostrar/ocultar barras de herramientas.
+- **Lazy Render y Detección de Página Activa**:
+  - En el modo cascada, utiliza `IntersectionObserver` para renderizar los overlays de texto únicamente en las páginas visibles (+1 de buffer), optimizando drásticamente el rendimiento del DOM en capítulos largos.
+  - Para sincronizar la página activa al hacer scroll en modo cascada, se utiliza un `IntersectionObserver` con un margen de pantalla central (`rootMargin: '-49% 0px -49% 0px'`). Esto detecta con precisión qué página cruza el centro de la pantalla y actualiza reactivamente `currentPageIndex`.
+- **Navegación Táctil/Teclado**: Atajos de teclado (flechas, espacio) y zonas de clic.
+  - **Teclado**: Las teclas de flecha (`ArrowLeft`, `ArrowRight`) cambian de página en modo simple/doble, pero son desactivadas en modo cascada para evitar la desincronización del scroll vertical.
+  - **Zonas de Clic (Tap Zones)**: Para avanzar o retroceder páginas, se evalúan las coordenadas del clic de forma relativa al bounding box de la imagen activa (`e.clientX`). El tercio izquierdo y derecho de la imagen física delimitan los retrocesos y avances de página, evitando disparos accidentales al hacer clic fuera del lienzo de la imagen y manteniendo la precisión independientemente del zoom o el ajuste de pantalla.
 - **Estado Persistente**: Configuración de layout, dirección, zoom y paneles guardados en `localStorage`.
 
 ### 5.8. Margen de Seguridad (Padding) y Ordenamiento de Lectura (Recursive XY-Cut)
@@ -231,17 +236,25 @@ Para descartar detecciones duplicadas o burbujas anidadas en el backend ([orches
 - Se compara cada par de cajas. Si la intersección entre la caja A (más chica) y la caja B cubre más del 70% del área de A:
   - Se limpian los textos japoneses (`texto_original`) de espacios y puntuación.
   - Si el texto limpio de una es una subcadena del otro (o si alguna está vacía por falla de OCR), se descarta la caja pequeña A y se conserva la caja grande B.
+- **Validación del Contrato**: La función `validateTranslationContract` en [validate-contract.ts](../functions/src/lib/validate-contract.ts) realiza la validación de tipo en el backend. Admite traducciones y textos originales de 1 carácter de longitud (rechazando únicamente valores vacíos `length === 0`), lo cual permite procesar onomatopeyas o caracteres individuales pero semánticamente importantes, delegando la mitigación de falsos positivos al prompt del modelo en lugar de filtros rígidos de longitud.
 
 ### 5.10. Escalado Responsivo de Texto e Interacción Bidireccional
 1. **Escalado por Container Queries (Vía CSS/Tailwind)**:
    - El contenedor de la imagen ([OverlayRenderer.vue](../frontend/src/components/OverlayRenderer.vue)) se declara como contenedor de tamaño lineal (`container-type: inline-size`).
    - Se elimina el texto japonés de las cajas en la imagen, mostrando únicamente el texto traducido para maximizar la legibilidad.
    - El tamaño de letra (`font-size`) de cada caja se calcula inline en unidades de contenedor (`cqw`) basándose en una relación matemática entre el área relativa de la caja y el conteo de caracteres. Esto escala de forma fluida y proporcional la tipografía cuando la imagen se redimensiona.
-2. **Hover Bidireccional (Dos Vías)**:
+2. **Identificación Única Multicanal (Composite IDs)**:
+   - Dado que los IDs de los globos en el backend se indexan de `1` a `N` en cada página independiente, el frontend utiliza IDs compuestos con formato `${pageIndex}-${boxId}` para los elementos del DOM y el estado de selección. Esto evita conflictos de IDs al mostrar múltiples páginas simultáneamente (modo doble o cascada) y asegura que las interacciones se asignen de forma inequívoca a la página correspondiente.
+3. **Hover Bidireccional (Dos Vías)**:
    - Posicionar el cursor sobre una caja en la imagen resalta su borde e incrementa su nivel de superposición (`z-10` o `z-20`).
-   - Posicionar el cursor en la lista lateral ([TranslationPanel.vue](../frontend/src/components/TranslationPanel.vue)) destaca la caja correspondiente sobre la imagen.
-3. **Click-to-Focus y Scroll Autónomo**:
-   - Al hacer clic sobre una caja en la imagen, el sistema abre la barra lateral de traducción (si estaba cerrada) y realiza un scroll animado suave (`scrollIntoView`) hacia el botón del listado correspondiente, permitiendo al usuario leer cómodamente el texto completo y su original en japonés si la caja es muy pequeña.
+   - Posicionar el cursor en la lista lateral ([TranslationPanel.vue](../frontend/src/components/TranslationPanel.vue)) destaca la caja correspondiente sobre la imagen utilizando el ID compuesto.
+4. **Click-to-Focus, Scroll Autónomo y Deselección**:
+   - Al hacer clic sobre una caja en la imagen, el sistema abre la barra lateral de traducción (si estaba cerrada) y realiza un scroll animado suave (`scrollIntoView`) hacia el botón del listado correspondiente.
+   - Al hacer clic en cualquier área vacía de la imagen o del fondo del lector (fuera de las cajas de diálogo), se elimina el resaltado de selección de la caja activa.
+5. **Agrupación y Filtrado Dinámico de Traducciones**:
+   - En [TranslationPanel.vue](../frontend/src/components/TranslationPanel.vue), la lista de traducciones se adapta al modo de lectura actual:
+     - En **Modo Doble**, la lista divide las traducciones en grupos según la página (ej. "Página 1", "Página 2") para que el usuario navegue en paralelo por ambas páginas visualizadas, soportando adecuadamente la disposición de doble página o páginas impares/pares individuales (como la portada).
+     - En **Modo Simple** y **Modo Cascada**, la lista se filtra dinámicamente para mostrar únicamente las traducciones pertenecientes a la página activa (`currentPageIndex`), evitando ruido visual.
 
 ---
 
