@@ -41,7 +41,7 @@ const MAX_PAGES = 50;
 const MAX_CANVAS_WIDTH = 1200;
 const MAX_CANVAS_HEIGHT = 1600;
 
-const props = defineProps<{ imageData: string }>();
+const props = defineProps<{ imageData?: string }>();
 const emit = defineEmits<{
   (e: 'update:imageData', value: string): void;
   (e: 'chapterLoaded', pages: string[]): void;

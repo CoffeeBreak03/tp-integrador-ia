@@ -124,10 +124,11 @@ tp-integrador-ia/
 │   │   ├── App.vue             ← Componente raíz, orquestación de capítulo y caché
 │   │   ├── components/         ← Componentes de UI
 │   │   │   ├── ImageUploader.vue     ← Carga de imágenes, PDFs, ZIPs y multi-selección
+│   │   │   ├── MangaReader.vue       ← Visor inmersivo a pantalla completa (Modo Enfoque)
 │   │   │   ├── OverlayRenderer.vue   ← Dibuja las cajas traducidas absolutas + spinner de carga
-│   │   │   ├── PageNavigator.vue     ← Navegación entre páginas del capítulo (Anterior/Siguiente)
 │   │   │   └── TranslationPanel.vue  ← Barra lateral de búsqueda y navegación
-│   │   ├── lib/                ← Lógica auxiliar y compartida
+│   │   ├── composables/
+│   │   │   └── useChapterProcessor.ts ← Estado y orquestación del pipeline de IA
 │   │   │   ├── api.ts          ← Cliente HTTP con retry + soporte de contexto
 │   │   │   ├── contract.ts     ← Validador de contrato + interfaces (ProcessPageResponse)
 │   │   │   └── scale.ts        ← Conversiones de coordenadas [0-1000] ↔ píxeles
@@ -200,7 +201,7 @@ El componente [ImageUploader.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/c
 - Límite máximo configurable de **50 páginas** por capítulo.
 
 ### 5.6. Procesamiento Secuencial con Contexto y Sistema de Cola
-Cuando se carga un capítulo, [App.vue](../frontend/src/App.vue) orquesta el procesamiento secuencial utilizando una cola de páginas (`chapterQueue`):
+Cuando se carga un capítulo, el composable [useChapterProcessor.ts](../frontend/src/composables/useChapterProcessor.ts) orquesta el procesamiento secuencial:
 1. El frontend encola los índices de todas las páginas cargadas.
 2. Un trabajador asíncrono (`processQueue`) procesa la cola de a una página a la vez. En cada llamada a `POST /api/process` se busca secuencialmente hacia atrás el último contexto válido devuelto por las páginas anteriores.
 3. GPT-4o usa el contexto acumulado para mantener la coherencia narrativa (nombres de personajes, tono, eventos).
@@ -210,10 +211,12 @@ Cuando se carga un capítulo, [App.vue](../frontend/src/App.vue) orquesta el pro
 7. Al hacer clic en reintentar, se remueve el error de la caché y se agrega el índice de la página nuevamente a la cola de prioridad `chapterQueue` con prioridad alta (`priority: 1`). Esto asegura que se procese con prioridad inmediata (justo después de que termine la página actualmente en proceso) frente a las páginas restantes de prioridad estándar (`priority: 0`). Si el trabajador no estaba activo, se dispara de nuevo.
 8. El cliente HTTP ([api.ts](../frontend/src/lib/api.ts)) implementa reintentos automáticos (máximo 3) con backoff exponencial antes de propagar un fallo al cliente.
 
-### 5.7. Navegación de Páginas
-El componente [PageNavigator.vue](file:///e:/tmp/tp-integrador-ia/frontend/src/components/PageNavigator.vue) se instancia en dos ubicaciones de la interfaz (en la parte superior de la página y al pie de la imagen de manga):
-- Muestra botones "Anterior" y "Siguiente", indicador "Página X / N", spinner animado y progreso del capítulo.
-- Al interactuar con la navegación inferior, la pantalla realiza un scroll suave autónomo (`scrollIntoView`) que enfoca la parte superior de la imagen para facilitar una lectura fluida.
+### 5.7. Visor Inmersivo (Modo Enfoque) y Layouts de Lectura
+El componente [MangaReader.vue](../frontend/src/components/MangaReader.vue) ofrece una experiencia de lectura fluida a pantalla completa (100vw/100vh) que consume el estado reactivo del pipeline mediante `provide/inject`:
+- **Layouts soportados**: `Simple` (1 página), `Doble` (2 páginas emulando libro físico con soporte RTL/LTR y opción de página portada sola), y `Cascada` (scroll vertical continuo).
+- **Lazy Render**: En el modo cascada, utiliza `IntersectionObserver` para renderizar los overlays de texto únicamente en las páginas visibles (+1 de buffer), optimizando drásticamente el rendimiento del DOM en capítulos largos.
+- **Navegación Táctil/Teclado**: Atajos de teclado (flechas, espacio) y tap zones (tercios izquierdo/central/derecho) para navegar y mostrar/ocultar barras de herramientas.
+- **Estado Persistente**: Configuración de layout, dirección, zoom y paneles guardados en `localStorage`.
 
 ### 5.8. Margen de Seguridad (Padding) y Ordenamiento de Lectura (Recursive XY-Cut)
 1. **Margen de Seguridad (Padding)**: Durante la fase de parsing espacial en el backend ([orchestrator.ts](../functions/src/orchestrator.ts)), se expanden las coordenadas de cada caja un 5% de su tamaño original (con un mínimo de 10 unidades sobre la escala 0-1000) en las cuatro direcciones. Esto optimiza el recorte físico para que el OCR no corte caracteres y permite que las cajas de texto en el frontend no queden apretadas.

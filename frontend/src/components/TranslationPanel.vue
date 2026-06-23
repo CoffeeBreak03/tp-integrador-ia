@@ -1,5 +1,5 @@
 <template>
-  <aside class="rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/90">
+  <aside :class="flat ? 'flex h-full flex-col' : 'rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/90'">
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Traducciones</h2>
@@ -8,7 +8,7 @@
       <span class="rounded-full bg-blue-500 px-3 py-1 text-xs font-semibold text-white">{{ translations.length }}</span>
     </div>
 
-    <div class="mb-4">
+    <div class="mb-4 shrink-0">
       <input
         v-model="searchQuery"
         type="search"
@@ -17,7 +17,7 @@
       />
     </div>
 
-    <div class="space-y-3">
+    <div class="flex-1 space-y-3 overflow-y-auto pr-1">
       <button
         v-for="item in filteredTranslations"
         :key="item.id"
@@ -50,6 +50,7 @@ const props = defineProps<{
   translations: TranslationContract[];
   selectedItemId?: number;
   hoveredItemId?: number;
+  flat?: boolean;
 }>();
 
 const emit = defineEmits<{
