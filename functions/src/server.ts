@@ -13,6 +13,7 @@ import { translateText } from './translate';
 import { detectVision } from './vision';
 import { detectPage } from './detect';
 import { translatePage } from './translate-page';
+import { checkCacheRoute, saveCacheRoute } from './cache';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -29,6 +30,8 @@ app.post('/api/translate-page', translatePage);
 app.post('/api/warm-up', warmUp);
 app.post('/api/translate', translateText);
 app.post('/api/vision', detectVision);
+app.post('/api/cache/check', checkCacheRoute);
+app.post('/api/cache/save', saveCacheRoute);
 
 // Health check
 app.get('/api/health', (req, res) => {
