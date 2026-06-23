@@ -34,17 +34,19 @@
               <div
                 v-for="item in translations"
                 :key="item.id"
-                :id="'translation-box-' + item.id"
+                :id="'translation-box-' + pageIndex + '-' + item.id"
                 :style="{
                   ...styleFromBox(item.box),
                   fontSize: getBoxFontSize(item.box, item.texto_traducido)
                 }"
-                @click="$emit('selectBox', item)"
+                @click="$emit('selectBox', { pageIndex, item })"
+                @mouseenter="$emit('hoverBox', pageIndex + '-' + item.id)"
+                @mouseleave="$emit('hoverBox', undefined)"
                 class="absolute rounded-lg border-2 bg-white/80 p-1 leading-tight shadow-md backdrop-blur dark:bg-slate-950/80 cursor-pointer transition-all pointer-events-auto"
                 :class="{
-                  'border-blue-500 ring-2 ring-blue-400/40 z-20': item.id === selectedItemId,
-                  'border-blue-400 ring-2 ring-blue-400/20 z-10': item.id === hoveredItemId && item.id !== selectedItemId,
-                  'border-transparent hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 hover:z-10': item.id !== selectedItemId && item.id !== hoveredItemId,
+                  'border-blue-500 ring-2 ring-blue-400/40 z-20': pageIndex + '-' + item.id === selectedItemId,
+                  'border-blue-400 ring-2 ring-blue-400/20 z-10': pageIndex + '-' + item.id === hoveredItemId && pageIndex + '-' + item.id !== selectedItemId,
+                  'border-transparent hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 hover:z-10': pageIndex + '-' + item.id !== selectedItemId && pageIndex + '-' + item.id !== hoveredItemId,
                 }"
               >
                 <p class="font-semibold text-slate-900 dark:text-slate-100">{{ item.texto_traducido }}</p>
@@ -62,10 +64,11 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import type { TranslationContract } from '@/lib/contract';
 
 const props = defineProps<{
+  pageIndex: number;
   imageData: string;
   translations: TranslationContract[];
-  selectedItemId?: number;
-  hoveredItemId?: number;
+  selectedItemId?: string;
+  hoveredItemId?: string;
   showOverlay: boolean;
   fitToScreen?: boolean;
   isLoading?: boolean;
@@ -74,7 +77,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'selectBox', item: TranslationContract): void;
+  (e: 'selectBox', payload: { pageIndex: number; item: TranslationContract }): void;
+  (e: 'hoverBox', id: string | undefined): void;
   (e: 'imageLoaded', payload: { aspectRatio: number }): void;
 }>();
 

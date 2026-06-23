@@ -49,19 +49,25 @@
       class="relative flex-1 overflow-hidden" 
       ref="canvasRef"
       @mousemove="handleMouseMove"
+      @click="onBackgroundClick"
     >
       <!-- Single Page Mode -->
       <div v-if="layoutMode === 'single'" class="flex h-full w-full overflow-auto p-4">
-        <div :style="pageContainerStyle" class="relative z-20 flex-shrink-0 transition-transform duration-200 m-auto" @click="onImageClick">
+        <div :style="pageContainerStyle" class="relative z-20 flex-shrink-0 transition-transform duration-200 m-auto" @click.stop="onImageClick">
           <OverlayRenderer
             v-if="chapterPages[currentPageIndex]"
+            :pageIndex="currentPageIndex"
             :imageData="chapterPages[currentPageIndex]"
             :translations="pageCache.get(currentPageIndex)?.translations || []"
             :showOverlay="showOverlay"
             :isLoading="isProcessingChapter && pageCache.get(currentPageIndex)?.translationStatus !== 'success' && !pageCache.get(currentPageIndex)?.hasError"
             :fitMode="fitMode"
+            :selectedItemId="selectedItemId"
+            :hoveredItemId="hoveredItemId"
             flat
             @imageLoaded="onImageLoaded"
+            @selectBox="handleBoxSelect"
+            @hoverBox="handleBoxHover"
           />
         </div>
       </div>
@@ -72,13 +78,18 @@
           <div v-for="idx in activeSpreadIndices" :key="idx" :style="pageContainerStyle" class="flex-shrink-0">
              <OverlayRenderer
                 v-if="idx !== -1 && chapterPages[idx]"
+                :pageIndex="idx"
                 :imageData="chapterPages[idx]"
                 :translations="pageCache.get(idx)?.translations || []"
                 :showOverlay="showOverlay"
                 :isLoading="isProcessingChapter && pageCache.get(idx)?.translationStatus !== 'success' && !pageCache.get(idx)?.hasError"
                 :fitMode="fitMode"
+                :selectedItemId="selectedItemId"
+                :hoveredItemId="hoveredItemId"
                 flat
                 @imageLoaded="onImageLoaded"
+                @selectBox="handleBoxSelect"
+                @hoverBox="handleBoxHover"
               />
           </div>
         </div>
@@ -92,15 +103,21 @@
             :data-index="i"
             class="cascade-page-container relative mb-4 flex-shrink-0 w-full"
             :style="{ minHeight: '50vh' }"
+            @click="onImageClick"
           >
               <OverlayRenderer
+                :pageIndex="i"
                 :imageData="page"
                 :translations="visiblePages.has(Number(i)) ? (pageCache.get(i)?.translations || []) : []"
                 :showOverlay="showOverlay"
                 :isLoading="isProcessingChapter && pageCache.get(i)?.translationStatus !== 'success' && !pageCache.get(i)?.hasError"
                 :fitMode="fitMode"
+                :selectedItemId="selectedItemId"
+                :hoveredItemId="hoveredItemId"
                 flat
                 @imageLoaded="onImageLoaded"
+                @selectBox="handleBoxSelect"
+                @hoverBox="handleBoxHover"
               />
           </div>
         </div>
@@ -233,8 +250,11 @@
 
       <div class="flex-1 overflow-hidden p-4 md:p-6">
         <TranslationPanel
-          :translations="pageCache.get(currentPageIndex)?.translations || []"
+          :pageGroups="activePageGroups"
+          :selectedItemId="selectedItemId"
+          :hoveredItemId="hoveredItemId"
           @selectItem="handleTranslationSelect"
+          @hoverItem="handleBoxHover"
           flat
         />
       </div>
@@ -318,6 +338,57 @@ watch([layoutMode, readingDirection, fitMode, zoomPercent, doublePageCover, show
 const activePanel = ref<'settings' | 'translations' | null>(null);
 const togglePanel = (panel: 'settings' | 'translations') => {
   activePanel.value = activePanel.value === panel ? null : panel;
+};
+
+// --- Selection & Hover State ---
+const selectedItemId = ref<string | undefined>(undefined);
+const hoveredItemId = ref<string | undefined>(undefined);
+
+const activePageGroups = computed(() => {
+  if (layoutMode.value === 'double') {
+    return activeSpreadIndices.value
+      .filter(idx => idx !== -1)
+      .map(idx => ({
+        pageIndex: idx,
+        title: `Página ${idx + 1}`,
+        translations: pageCache.value.get(idx)?.translations || []
+      }));
+  }
+  return [{
+    pageIndex: currentPageIndex.value,
+    title: `Página ${currentPageIndex.value + 1}`,
+    translations: pageCache.value.get(currentPageIndex.value)?.translations || []
+  }];
+});
+
+const handleBoxSelect = (payload: { pageIndex: number; item: any }) => {
+  selectedItemId.value = `${payload.pageIndex}-${payload.item.id}`;
+  activePanel.value = 'translations';
+  
+  nextTick(() => {
+    const el = document.getElementById(`translation-item-${payload.pageIndex}-${payload.item.id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+};
+
+const handleTranslationSelect = (payload: { pageIndex: number; item: any }) => {
+  selectedItemId.value = `${payload.pageIndex}-${payload.item.id}`;
+  if (window.innerWidth < 768) {
+    activePanel.value = null;
+  }
+  
+  nextTick(() => {
+    const el = document.getElementById(`translation-box-${payload.pageIndex}-${payload.item.id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+};
+
+const handleBoxHover = (id: string | undefined) => {
+  hoveredItemId.value = id;
 };
 
 // Top bar auto-hide
@@ -547,13 +618,37 @@ const onImageClick = (e: MouseEvent) => {
   // Ignore clicks on translation boxes and other UI overlays
   if (target.closest('.absolute.rounded-lg.border-2')) return;
   
+  let didDeselect = false;
+  if (selectedItemId.value !== undefined) {
+    selectedItemId.value = undefined;
+    didDeselect = true;
+  }
+  
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
   const x = e.clientX - rect.left;
   const width = rect.width;
   
-  if (x < width / 3) handleTapZone('left');
-  else if (x > width * 2 / 3) handleTapZone('right');
-  else handleTapZone('center');
+  if (x < width / 3) {
+    handleTapZone('left');
+  } else if (x > width * 2 / 3) {
+    handleTapZone('right');
+  } else {
+    if (!didDeselect) {
+      handleTapZone('center');
+    }
+  }
+};
+
+const onBackgroundClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  // Ignore if clicking on the image containers or translation boxes (they handle their own clicks)
+  if (target.closest('.relative.z-20')) return;
+  if (target.closest('.cascade-page-container')) return;
+  if (target.closest('.absolute.rounded-lg.border-2')) return;
+  
+  if (selectedItemId.value !== undefined) {
+    selectedItemId.value = undefined;
+  }
 };
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -593,14 +688,9 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeydown);
 });
 
-// --- Translation Handle ---
-const handleTranslationSelect = (item: any) => {
-  if (window.innerWidth < 768) {
-    activePanel.value = null;
-  }
-};
-
 watch(currentPageIndex, () => {
   showTopBarTemp();
+  selectedItemId.value = undefined;
+  hoveredItemId.value = undefined;
 });
 </script>
