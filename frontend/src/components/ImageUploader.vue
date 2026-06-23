@@ -1,7 +1,21 @@
 <template>
   <div class="relative">
-    <div v-if="!imageData" class="relative min-h-[320px] overflow-hidden rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-950/80">
-        <div class="mx-auto flex max-w-xs flex-col items-center justify-center gap-4">
+    <div v-if="!imageData" class="relative min-h-[320px] overflow-hidden rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-950/80 flex flex-col items-center justify-center">
+      <!-- Loading State -->
+      <div v-if="isProcessingFile" class="flex flex-col items-center justify-center gap-6 animate-in fade-in duration-300">
+        <div class="relative flex h-20 w-20 items-center justify-center">
+          <div class="absolute inset-0 rounded-full border-4 border-slate-200 dark:border-slate-800"></div>
+          <div class="absolute inset-0 animate-spin rounded-full border-4 border-blue-500 border-t-transparent shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+          <svg class="h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        </div>
+        <div class="space-y-2">
+          <p class="text-xl font-bold text-slate-900 dark:text-slate-100">Cargando archivo...</p>
+          <p class="text-sm font-medium text-blue-600 dark:text-blue-400 animate-pulse">{{ processingStatus }}</p>
+        </div>
+      </div>
+      
+      <!-- Normal Upload State -->
+      <div v-else class="mx-auto flex max-w-xs flex-col items-center justify-center gap-4">
           <button
             type="button"
             @click="openExplorer"
@@ -41,6 +55,9 @@ import { calculateFileHash, calculateMultipleFilesHash } from '@/lib/hash';
 const MAX_PAGES = 50;
 const MAX_CANVAS_WIDTH = 1200;
 const MAX_CANVAS_HEIGHT = 1600;
+
+const isProcessingFile = ref(false);
+const processingStatus = ref('');
 
 const props = defineProps<{ imageData?: string }>();
 const emit = defineEmits<{
@@ -147,6 +164,9 @@ const handleFileUpload = async (event: Event) => {
   const files = target.files;
   if (!files || files.length === 0) return;
 
+  isProcessingFile.value = true;
+  processingStatus.value = 'Iniciando carga...';
+
   try {
     // Caso: un solo archivo
     if (files.length === 1) {
@@ -154,6 +174,7 @@ const handleFileUpload = async (event: Event) => {
 
       // Calcular el hash del archivo
       try {
+        processingStatus.value = 'Calculando firma del archivo (hashing)...';
         const hash = await calculateFileHash(file);
         let fileType = 'image';
         if (file.type === 'application/pdf') {
@@ -167,6 +188,7 @@ const handleFileUpload = async (event: Event) => {
       }
 
       if (file.type === 'application/pdf') {
+        processingStatus.value = 'Renderizando páginas del PDF...';
         // PDF multi-página
         const pages = await handlePdfFile(file);
         if (pages.length === 1) {
@@ -179,6 +201,7 @@ const handleFileUpload = async (event: Event) => {
       }
 
       if (file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip')) {
+        processingStatus.value = 'Descomprimiendo imágenes del ZIP...';
         // Archivo ZIP con imágenes
         const pages = await handleZipFile(file);
         if (pages.length === 0) {
@@ -193,6 +216,7 @@ const handleFileUpload = async (event: Event) => {
       }
 
       if (file.type.startsWith('image/')) {
+        processingStatus.value = 'Procesando imagen...';
         // Imagen individual
         const imageData = await buildImageDataUrl(file);
         emit('update:imageData', imageData);
@@ -215,12 +239,14 @@ const handleFileUpload = async (event: Event) => {
 
     // Calcular hash combinado para múltiples imágenes
     try {
+      processingStatus.value = 'Calculando firma de los archivos...';
       const hash = await calculateMultipleFilesHash(limitedFiles);
       emit('fileHashed', { hash, type: 'zip' }); // Tratamos la colección como un 'zip' virtual para el caché
     } catch (hashError) {
       console.error('[HASH] Failed to calculate hash for multiple files:', hashError);
     }
 
+    processingStatus.value = 'Procesando imágenes...';
     const pages: string[] = [];
     for (const file of limitedFiles) {
       const dataUrl = await buildImageDataUrl(file);
@@ -234,6 +260,9 @@ const handleFileUpload = async (event: Event) => {
     }
   } catch (error) {
     console.warn(error);
+  } finally {
+    isProcessingFile.value = false;
+    processingStatus.value = '';
   }
 };
 

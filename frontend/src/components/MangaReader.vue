@@ -118,7 +118,7 @@
               <OverlayRenderer
                 :pageIndex="Number(i)"
                 :imageData="page"
-                :translations="visiblePages.has(Number(i)) ? (pageCache.get(Number(i))?.translations || []) : []"
+                :translations="Math.abs(Number(i) - currentPageIndex) <= 1 ? (pageCache.get(Number(i))?.translations || []) : []"
                 :showOverlay="showOverlay"
                 :isLoading="isProcessingChapter && pageCache.get(Number(i))?.translationStatus !== 'success' && !pageCache.get(Number(i))?.hasError"
                 :fitMode="fitMode"
@@ -558,8 +558,6 @@ const doubleContainerStyle = computed(() => {
 
 // --- Cascade Lazy Render ---
 const cascadeScrollRef = ref<HTMLElement | null>(null);
-const visiblePages = ref<Set<number>>(new Set([0, 1, 2]));
-let visibleObserver: IntersectionObserver | null = null;
 let currentObserver: IntersectionObserver | null = null;
 
 const onCascadeScroll = () => {
@@ -567,18 +565,9 @@ const onCascadeScroll = () => {
 };
 
 const setupObservers = () => {
-  if (visibleObserver) visibleObserver.disconnect();
   if (currentObserver) currentObserver.disconnect();
   
   if (!cascadeScrollRef.value) return;
-
-  visibleObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      const idx = Number(entry.target.getAttribute('data-index'));
-      if (entry.isIntersecting) visiblePages.value.add(idx);
-      else visiblePages.value.delete(idx);
-    });
-  }, { root: cascadeScrollRef.value, rootMargin: '100% 0px' });
 
   currentObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
@@ -597,7 +586,6 @@ onMounted(() => {
       setupObservers();
       const els = document.querySelectorAll('.cascade-page-container');
       els.forEach(el => {
-        visibleObserver?.observe(el);
         currentObserver?.observe(el);
       });
       // Restaurar scroll a la página actual al cambiar a cascada
@@ -606,14 +594,12 @@ onMounted(() => {
         targetEl.scrollIntoView({ behavior: 'instant', block: 'start' });
       }
     } else {
-      if (visibleObserver) visibleObserver.disconnect();
       if (currentObserver) currentObserver.disconnect();
     }
   }, { immediate: true });
 });
 
 onUnmounted(() => {
-  visibleObserver?.disconnect();
   currentObserver?.disconnect();
   window.removeEventListener('keydown', handleKeydown);
 });

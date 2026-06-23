@@ -15,6 +15,7 @@
             ref="imgRef"
             :src="imageData"
             alt="Documento cargado"
+            loading="lazy"
             @load="onImageLoad"
             :class="imageClass"
           />
@@ -42,7 +43,7 @@
                 @click="$emit('selectBox', { pageIndex, item })"
                 @mouseenter="$emit('hoverBox', pageIndex + '-' + item.id)"
                 @mouseleave="$emit('hoverBox', undefined)"
-                class="absolute rounded-lg border-2 bg-white/80 p-1 leading-tight shadow-md backdrop-blur dark:bg-slate-950/80 cursor-pointer transition-all pointer-events-auto"
+                class="absolute rounded-lg border-2 bg-white/95 p-1 leading-tight shadow-md dark:bg-slate-950/95 cursor-pointer transition-all pointer-events-auto"
                 :class="{
                   'border-blue-500 ring-2 ring-blue-400/40 z-20': pageIndex + '-' + item.id === selectedItemId,
                   'border-blue-400 ring-2 ring-blue-400/20 z-10': pageIndex + '-' + item.id === hoveredItemId && pageIndex + '-' + item.id !== selectedItemId,
@@ -62,6 +63,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import type { TranslationContract } from '@/lib/contract';
+
+const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < 768);
+
+const updateMobile = () => {
+  isMobile.value = window.innerWidth < 768;
+};
+
+onMounted(() => {
+  window.addEventListener('resize', updateMobile);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateMobile);
+});
 
 const props = defineProps<{
   pageIndex: number;
@@ -138,10 +153,13 @@ const getBoxFontSize = (box: [number, number, number, number], text: string) => 
   const charCount = text.length || 1;
   
   // Calculate relative size in cqw (Container Query Width)
-  let fontSizeCqw = Math.sqrt(area / (charCount * 0.55)) * 0.85;
+  const multiplier = isMobile.value ? 1.3 : 0.85;
+  let fontSizeCqw = Math.sqrt(area / (charCount * 0.55)) * multiplier;
   
   // Clamp between a reasonable readable range:
-  fontSizeCqw = Math.max(0.6, Math.min(1.4, fontSizeCqw));
+  const minFont = isMobile.value ? 1.1 : 0.6;
+  const maxFont = isMobile.value ? 2.5 : 1.4;
+  fontSizeCqw = Math.max(minFont, Math.min(maxFont, fontSizeCqw));
   return `${fontSizeCqw.toFixed(2)}cqw`;
 };
 </script>
