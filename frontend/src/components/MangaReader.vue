@@ -52,17 +52,13 @@
     >
       <!-- Single Page Mode -->
       <div v-if="layoutMode === 'single'" class="flex h-full w-full overflow-auto p-4">
-        <div class="absolute inset-y-0 left-0 w-1/3 z-10 cursor-pointer" @click="handleTapZone('left')"></div>
-        <div class="absolute inset-y-0 left-1/3 w-1/3 z-10 cursor-pointer" @click="handleTapZone('center')"></div>
-        <div class="absolute inset-y-0 right-0 w-1/3 z-10 cursor-pointer" @click="handleTapZone('right')"></div>
-
-        <div :style="pageContainerStyle" class="relative z-20 flex-shrink-0 transition-transform duration-200 m-auto">
+        <div :style="pageContainerStyle" class="relative z-20 flex-shrink-0 transition-transform duration-200 m-auto" @click="onImageClick">
           <OverlayRenderer
             v-if="chapterPages[currentPageIndex]"
             :imageData="chapterPages[currentPageIndex]"
             :translations="pageCache.get(currentPageIndex)?.translations || []"
             :showOverlay="showOverlay"
-            :isLoading="pageCache.get(currentPageIndex)?.detectionStatus === 'loading' || pageCache.get(currentPageIndex)?.translationStatus === 'loading'"
+            :isLoading="isProcessingChapter && pageCache.get(currentPageIndex)?.translationStatus !== 'success' && !pageCache.get(currentPageIndex)?.hasError"
             :fitMode="fitMode"
             flat
             @imageLoaded="onImageLoaded"
@@ -72,18 +68,14 @@
 
       <!-- Double Page Mode -->
       <div v-else-if="layoutMode === 'double'" class="flex h-full w-full overflow-auto p-4">
-        <div class="absolute inset-y-0 left-0 w-1/3 z-10 cursor-pointer" @click="handleTapZone('left')"></div>
-        <div class="absolute inset-y-0 left-1/3 w-1/3 z-10 cursor-pointer" @click="handleTapZone('center')"></div>
-        <div class="absolute inset-y-0 right-0 w-1/3 z-10 cursor-pointer" @click="handleTapZone('right')"></div>
-
-        <div class="relative z-20 flex flex-shrink-0 items-center justify-center gap-1 transition-transform duration-200 m-auto" :style="doubleContainerStyle">
+        <div class="relative z-20 flex flex-shrink-0 items-center justify-center gap-1 transition-transform duration-200 m-auto" :style="doubleContainerStyle" @click="onImageClick">
           <div v-for="idx in activeSpreadIndices" :key="idx" :style="pageContainerStyle" class="flex-shrink-0">
              <OverlayRenderer
                 v-if="idx !== -1 && chapterPages[idx]"
                 :imageData="chapterPages[idx]"
                 :translations="pageCache.get(idx)?.translations || []"
                 :showOverlay="showOverlay"
-                :isLoading="pageCache.get(idx)?.detectionStatus === 'loading' || pageCache.get(idx)?.translationStatus === 'loading'"
+                :isLoading="isProcessingChapter && pageCache.get(idx)?.translationStatus !== 'success' && !pageCache.get(idx)?.hasError"
                 :fitMode="fitMode"
                 flat
                 @imageLoaded="onImageLoaded"
@@ -101,11 +93,11 @@
             class="cascade-page-container relative mb-4 flex-shrink-0 w-full"
             :style="{ minHeight: '50vh' }"
           >
-             <OverlayRenderer
+              <OverlayRenderer
                 :imageData="page"
                 :translations="visiblePages.has(Number(i)) ? (pageCache.get(i)?.translations || []) : []"
                 :showOverlay="showOverlay"
-                :isLoading="pageCache.get(i)?.detectionStatus === 'loading' || pageCache.get(i)?.translationStatus === 'loading'"
+                :isLoading="isProcessingChapter && pageCache.get(i)?.translationStatus !== 'success' && !pageCache.get(i)?.hasError"
                 :fitMode="fitMode"
                 flat
                 @imageLoaded="onImageLoaded"
@@ -476,38 +468,62 @@ const doubleContainerStyle = computed(() => {
 // --- Cascade Lazy Render ---
 const cascadeScrollRef = ref<HTMLElement | null>(null);
 const visiblePages = ref<Set<number>>(new Set([0, 1, 2]));
-let observer: IntersectionObserver | null = null;
+let visibleObserver: IntersectionObserver | null = null;
+let currentObserver: IntersectionObserver | null = null;
 
 const onCascadeScroll = () => {
   showTopBarTemp();
 };
 
-onMounted(() => {
-  observer = new IntersectionObserver((entries) => {
+const setupObservers = () => {
+  if (visibleObserver) visibleObserver.disconnect();
+  if (currentObserver) currentObserver.disconnect();
+  
+  if (!cascadeScrollRef.value) return;
+
+  visibleObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const idx = Number(entry.target.getAttribute('data-index'));
+      if (entry.isIntersecting) visiblePages.value.add(idx);
+      else visiblePages.value.delete(idx);
+    });
+  }, { root: cascadeScrollRef.value, rootMargin: '100% 0px' });
+
+  currentObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       const idx = Number(entry.target.getAttribute('data-index'));
       if (entry.isIntersecting) {
-        visiblePages.value.add(idx);
-        if (entry.intersectionRatio > 0.5) {
-          currentPageIndex.value = idx;
-        }
-      } else {
-        visiblePages.value.delete(idx);
+        currentPageIndex.value = idx;
       }
     });
-  }, { threshold: [0, 0.5] });
+  }, { root: cascadeScrollRef.value, rootMargin: '-49% 0px -49% 0px' });
+};
 
+onMounted(() => {
   watch(() => layoutMode.value, async (val) => {
     if (val === 'cascade') {
       await nextTick();
+      setupObservers();
       const els = document.querySelectorAll('.cascade-page-container');
-      els.forEach(el => observer?.observe(el));
+      els.forEach(el => {
+        visibleObserver?.observe(el);
+        currentObserver?.observe(el);
+      });
+      // Restaurar scroll a la página actual al cambiar a cascada
+      const targetEl = document.querySelector(`.cascade-page-container[data-index="${currentPageIndex.value}"]`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+    } else {
+      if (visibleObserver) visibleObserver.disconnect();
+      if (currentObserver) currentObserver.disconnect();
     }
   }, { immediate: true });
 });
 
 onUnmounted(() => {
-  observer?.disconnect();
+  visibleObserver?.disconnect();
+  currentObserver?.disconnect();
   window.removeEventListener('keydown', handleKeydown);
 });
 
@@ -526,6 +542,20 @@ const handleTapZone = (zone: 'left' | 'center' | 'right') => {
   }
 };
 
+const onImageClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  // Ignore clicks on translation boxes and other UI overlays
+  if (target.closest('.absolute.rounded-lg.border-2')) return;
+  
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const width = rect.width;
+  
+  if (x < width / 3) handleTapZone('left');
+  else if (x > width * 2 / 3) handleTapZone('right');
+  else handleTapZone('center');
+};
+
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
     if (activePanel.value) {
@@ -540,9 +570,13 @@ const handleKeydown = (e: KeyboardEvent) => {
   const isRTL = readingDirection.value === 'rtl';
   
   if (e.key === 'ArrowRight') {
-    isRTL ? prevPage() : nextPage();
+    if (layoutMode.value !== 'cascade') {
+      isRTL ? prevPage() : nextPage();
+    }
   } else if (e.key === 'ArrowLeft') {
-    isRTL ? nextPage() : prevPage();
+    if (layoutMode.value !== 'cascade') {
+      isRTL ? nextPage() : prevPage();
+    }
   } else if (e.key === ' ') {
     e.preventDefault();
     if (layoutMode.value === 'cascade') {
