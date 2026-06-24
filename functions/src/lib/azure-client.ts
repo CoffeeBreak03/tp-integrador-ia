@@ -217,7 +217,7 @@ export class AzureClient {
         type: 'image_url',
         image_url: {
           url: `data:image/jpeg;base64,${bubble.base64}`,
-          detail: 'high'
+          detail: 'low'
         }
       });
     }

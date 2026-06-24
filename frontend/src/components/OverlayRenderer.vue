@@ -29,6 +29,21 @@
             <p class="mt-3 text-sm font-medium text-white">Procesando página...</p>
           </div>
 
+          <!-- Icono de error para reintentar -->
+          <div
+            v-else-if="hasError"
+            class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-colors hover:bg-slate-900/50 cursor-pointer"
+            @click.stop="$emit('retry')"
+          >
+            <div class="rounded-full bg-red-500/20 p-4 mb-3 text-red-500 ring-2 ring-red-500/50 backdrop-blur-md transition-transform hover:scale-110">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+            </div>
+            <p class="text-sm font-medium text-white drop-shadow-md">Error al procesar. Click para reintentar</p>
+          </div>
+
           <!-- Overlay para container queries: tiene el mismo tamaño exacto que la imagen gracias a inset-0 -->
           <div class="absolute inset-0 z-10 pointer-events-none" style="container-type: inline-size;">
             <template v-if="showOverlay">
@@ -87,6 +102,7 @@ const props = defineProps<{
   showOverlay: boolean;
   fitToScreen?: boolean;
   isLoading?: boolean;
+  hasError?: boolean;
   flat?: boolean;
   fitMode?: 'height' | 'width';
 }>();
@@ -95,6 +111,7 @@ const emit = defineEmits<{
   (e: 'selectBox', payload: { pageIndex: number; item: TranslationContract }): void;
   (e: 'hoverBox', id: string | undefined): void;
   (e: 'imageLoaded', payload: { aspectRatio: number }): void;
+  (e: 'retry'): void;
 }>();
 
 const imgRef = ref<HTMLImageElement | null>(null);

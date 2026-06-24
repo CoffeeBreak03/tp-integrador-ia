@@ -211,10 +211,35 @@ export class PipelineOrchestrator {
             toKeep.delete(smaller.id);
           }
 
-          // Si ambos tienen texto y hay coincidencia parcial, eliminamos el más chico
+          // Si ambos tienen texto, calculamos si son duplicados
           if (cleanTextSmaller !== '' && cleanTextLarger !== '') {
-            if (cleanTextLarger.includes(cleanTextSmaller) || cleanTextSmaller.includes(cleanTextLarger)) {
-              console.log(`[ORCHESTRATOR] Removing overlapping duplicate box (substring): ID ${smaller.id} (Text: "${smaller.texto_original}") overlapped by ID ${larger.id} (Text: "${larger.texto_original}")`);
+            const isSubstring = cleanTextLarger.includes(cleanTextSmaller) || cleanTextSmaller.includes(cleanTextLarger);
+            
+            const cleanTransSmaller = smaller.texto_traducido.replace(/[\s\p{P}]/gu, '').toLowerCase();
+            const cleanTransLarger = larger.texto_traducido.replace(/[\s\p{P}]/gu, '').toLowerCase();
+            const isSameTranslation = cleanTransSmaller === cleanTransLarger && cleanTransSmaller !== '';
+
+            const maxLength = Math.max(cleanTextSmaller.length, cleanTextLarger.length);
+            let similarity = 0;
+            if (maxLength > 0) {
+              const matrix = Array(cleanTextLarger.length + 1).fill(null).map(() => Array(cleanTextSmaller.length + 1).fill(null));
+              for (let i = 0; i <= cleanTextSmaller.length; i++) matrix[0][i] = i;
+              for (let j = 0; j <= cleanTextLarger.length; j++) matrix[j][0] = j;
+              for (let j = 1; j <= cleanTextLarger.length; j++) {
+                for (let i = 1; i <= cleanTextSmaller.length; i++) {
+                  const indicator = cleanTextSmaller[i - 1] === cleanTextLarger[j - 1] ? 0 : 1;
+                  matrix[j][i] = Math.min(
+                    matrix[j][i - 1] + 1,
+                    matrix[j - 1][i] + 1,
+                    matrix[j - 1][i - 1] + indicator
+                  );
+                }
+              }
+              similarity = (maxLength - matrix[cleanTextLarger.length][cleanTextSmaller.length]) / maxLength;
+            }
+
+            if (isSubstring || isSameTranslation || similarity > 0.6) {
+              console.log(`[ORCHESTRATOR] Removing overlapping duplicate box (similarity/match): ID ${smaller.id} (Text: "${smaller.texto_original}") overlapped by ID ${larger.id} (Text: "${larger.texto_original}")`);
               toKeep.delete(smaller.id);
             }
           }
@@ -325,11 +350,13 @@ export class PipelineOrchestrator {
           })),
         };
       }
+
+      throw new Error('El JSON parseado no tiene el formato esperado.');
     } catch (error) {
-      console.warn('[Pipeline] Failed to parse OCR and translations:', error);
-      console.warn('[Pipeline] Raw response was:', raw);
+      console.error('[Pipeline] Failed to parse OCR and translations:', error);
+      console.error('[Pipeline] Raw response was:', raw);
+      throw new Error(`Fallo al parsear la respuesta de GPT-4o: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return { contexto: fallbackContexto || '', translations: [] };
   }
 }
 

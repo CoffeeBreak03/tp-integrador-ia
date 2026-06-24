@@ -71,6 +71,7 @@
             :translations="pageCache.get(currentPageIndex)?.translations || []"
             :showOverlay="showOverlay"
             :isLoading="(isProcessingChapter || isLoading) && pageCache.get(currentPageIndex)?.translationStatus !== 'success' && !pageCache.get(currentPageIndex)?.hasError"
+            :hasError="pageCache.get(currentPageIndex)?.hasError"
             :fitMode="fitMode"
             :selectedItemId="selectedItemId"
             :hoveredItemId="hoveredItemId"
@@ -78,6 +79,7 @@
             @imageLoaded="onImageLoaded"
             @selectBox="handleBoxSelect"
             @hoverBox="handleBoxHover"
+            @retry="handleRetry(currentPageIndex)"
           />
         </div>
       </div>
@@ -93,6 +95,7 @@
                 :translations="pageCache.get(idx)?.translations || []"
                 :showOverlay="showOverlay"
                 :isLoading="(isProcessingChapter || isLoading) && pageCache.get(idx)?.translationStatus !== 'success' && !pageCache.get(idx)?.hasError"
+                :hasError="pageCache.get(idx)?.hasError"
                 :fitMode="fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
@@ -100,6 +103,7 @@
                 @imageLoaded="onImageLoaded"
                 @selectBox="handleBoxSelect"
                 @hoverBox="handleBoxHover"
+                @retry="handleRetry(idx)"
               />
           </div>
         </div>
@@ -121,6 +125,7 @@
                 :translations="Math.abs(Number(i) - currentPageIndex) <= 1 ? (pageCache.get(Number(i))?.translations || []) : []"
                 :showOverlay="showOverlay"
                 :isLoading="(isProcessingChapter || isLoading) && pageCache.get(Number(i))?.translationStatus !== 'success' && !pageCache.get(Number(i))?.hasError"
+                :hasError="pageCache.get(Number(i))?.hasError"
                 :fitMode="fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
@@ -128,6 +133,7 @@
                 @imageLoaded="onImageLoaded"
                 @selectBox="handleBoxSelect"
                 @hoverBox="handleBoxHover"
+                @retry="handleRetry(Number(i))"
               />
           </div>
         </div>
@@ -307,7 +313,8 @@ const {
   isLoading,
   goToPage,
   cacheHitCount,
-  showCacheToast
+  showCacheToast,
+  handleRetry
 } = processor;
 
 // --- Local State (Persisted) ---

@@ -362,3 +362,25 @@ sequenceDiagram
 * **Salud del Servidor (HF):** Evita inundar Hugging Face con peticiones en paralelo que causarían bloqueos de tasa `429` o degradación por CPU contention.
 * **Resiliencia ante fallos de Traducción:** Si la traducción de una página falla, la ejecución de la cola de traducción **no se detiene**. El pipeline continúa con las páginas siguientes buscando recursivamente hacia atrás en el caché el último contexto exitoso disponible. Esto permite al usuario ver la mayor parte del capítulo traducido e intentar reintentar de manera individual las páginas con error.
 
+---
+
+## 📝 9. Funcionalidades Implementadas Recientemente y Pendientes
+
+### ✅ Funcionalidades Implementadas Recientemente
+* **Visor y UI del Lector**:
+  * **Modos de Visualización**: Soporte completo para lectura en modo `Simple`, `Doble` (con soporte RTL/LTR y página de portada) y `Cascada` (scroll vertical continuo).
+  * **Detección de Página Activa y Overlays**: Detección dinámica de la página activa mediante `IntersectionObserver` con margen central, renderizando de forma perezosa (lazy) los overlays para optimizar el rendimiento del DOM.
+  * **Indicador de Carga Individual (Spinner)**: Se resolvió el bug visual donde las páginas individuales en procesamiento no mostraban el spinner de "procesando página" al recargar o cargar individualmente.
+  * **Despliegue del Menú por Proximidad (Hover)**: El encabezado y los botones de control se despliegan automáticamente al posicionar el cursor no solo en la parte superior, sino también en el borde derecho de la pantalla (optimizando la interacción en escritorio).
+  * **Sincronización de Traducciones**: Se solucionó el problema por el cual las traducciones no se mostraban inmediatamente en la lista al cargar páginas individuales hasta cambiar el modo de lectura.
+* **Manejo de Errores y Robustez**:
+  * **Caché Limpio**: Se corrigió el almacenamiento en caché silencioso de páginas vacías. Ahora, el backend lanza excepciones explícitas si la respuesta de GPT-4o falla al parsear JSON o retorna datos vacíos, marcando la página con error en el frontend.
+  * **Mensajes de Error y Reintento Manual**: Si una página falla en su traducción (por timeouts de Hugging Face/Azure o errores de API), se muestra un overlay de error con un icono indicador y botón de reintento interactivo directamente sobre la imagen en el lector. Al hacer clic, la página se reencola en la cola del procesador con prioridad alta.
+* **Optimización de Latencia y Filtro Inteligente**:
+  * **Llamadas Multimodales**: Configuración de `detail: 'low'` en las llamadas de imágenes para la API de visión de GPT-4o, lo que redujo drásticamente el tiempo de respuesta.
+  * **Filtro de Duplicados Avanzado**: Se extendió la limpieza de solapamientos en `orchestrator.ts` implementando una comparación basada en distancia de Levenshtein (umbral de similitud > 0.6) y coincidencias directas en las traducciones al español. Esto evita globos duplicados causados por sutiles diferencias de OCR (por ejemplo, cuando se lee furigana adjunto a un kanji).
+
+### ⏳ Funcionalidades Pendientes / No Implementadas
+* **Edición Directa de Traducciones**: Actualmente el usuario puede ver e identificar los globos de diálogo traducidos en el panel lateral y el lector, pero no cuenta con la opción de editar manualmente el texto traducido si detecta algún error de la IA.
+* **Descarga / Exportación**: No se ha desarrollado la funcionalidad para exportar o descargar el capítulo traducido completo a un nuevo archivo ZIP o PDF con los overlays incrustados en las imágenes.
+* **Ajustes de Personalización Estética de Overlays**: Falta añadir controles en el lector para cambiar la fuente tipográfica, el tamaño relativo global de los overlays, el color del texto traducido, o la opacidad del fondo de los globos de texto para mangas con fondos muy complejos.
