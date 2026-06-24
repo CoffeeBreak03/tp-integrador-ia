@@ -70,7 +70,7 @@
             :imageData="chapterPages[currentPageIndex]"
             :translations="pageCache.get(currentPageIndex)?.translations || []"
             :showOverlay="showOverlay"
-            :isLoading="isProcessingChapter && pageCache.get(currentPageIndex)?.translationStatus !== 'success' && !pageCache.get(currentPageIndex)?.hasError"
+            :isLoading="(isProcessingChapter || isLoading) && pageCache.get(currentPageIndex)?.translationStatus !== 'success' && !pageCache.get(currentPageIndex)?.hasError"
             :fitMode="fitMode"
             :selectedItemId="selectedItemId"
             :hoveredItemId="hoveredItemId"
@@ -92,7 +92,7 @@
                 :imageData="chapterPages[idx]"
                 :translations="pageCache.get(idx)?.translations || []"
                 :showOverlay="showOverlay"
-                :isLoading="isProcessingChapter && pageCache.get(idx)?.translationStatus !== 'success' && !pageCache.get(idx)?.hasError"
+                :isLoading="(isProcessingChapter || isLoading) && pageCache.get(idx)?.translationStatus !== 'success' && !pageCache.get(idx)?.hasError"
                 :fitMode="fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
@@ -120,7 +120,7 @@
                 :imageData="page"
                 :translations="Math.abs(Number(i) - currentPageIndex) <= 1 ? (pageCache.get(Number(i))?.translations || []) : []"
                 :showOverlay="showOverlay"
-                :isLoading="isProcessingChapter && pageCache.get(Number(i))?.translationStatus !== 'success' && !pageCache.get(Number(i))?.hasError"
+                :isLoading="(isProcessingChapter || isLoading) && pageCache.get(Number(i))?.translationStatus !== 'success' && !pageCache.get(Number(i))?.hasError"
                 :fitMode="fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
@@ -138,6 +138,8 @@
     <div 
       class="absolute bottom-6 right-6 z-40 flex flex-col gap-3 transition-all duration-300"
       :class="isTopBarVisible ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none'"
+      @mouseenter="topBarHovered = true"
+      @mouseleave="topBarHovered = false"
     >
       <button
         class="group relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-800/80 text-slate-200 shadow-lg backdrop-blur transition-colors hover:bg-slate-700 hover:text-white"
@@ -242,16 +244,23 @@
 
     <!-- Translations Drawer / Bottom Sheet -->
     <div 
-      class="fixed z-50 flex transform flex-col bg-slate-900/95 shadow-2xl backdrop-blur-xl transition-transform duration-300 md:inset-y-0 md:right-0 md:w-80 md:translate-y-0"
+      class="fixed z-50 flex transform flex-col bg-slate-900/95 shadow-2xl backdrop-blur-xl inset-x-0 bottom-0 h-[50dvh] md:h-[100dvh] md:bottom-auto md:left-auto md:top-0 md:inset-y-0 md:right-0 md:w-80 md:translate-y-0 overscroll-y-contain"
       :class="[
         activePanel === 'translations' 
           ? 'translate-y-0 md:translate-x-0' 
           : 'translate-y-full md:translate-y-0 md:translate-x-full',
-        'inset-x-0 bottom-0 h-[50dvh] md:h-[100dvh] md:bottom-auto md:left-auto md:top-0'
+        isDraggingPanel ? 'transition-none' : 'transition-transform duration-300'
       ]"
+      :style="drawerStyle"
+      @touchstart="handlePanelTouchStart"
+      @touchmove="handlePanelTouchMove"
+      @touchend="handlePanelTouchEnd"
     >
       <!-- Bottom sheet drag handle (mobile only) -->
-      <div class="flex shrink-0 cursor-pointer justify-center pt-3 pb-1 md:hidden" @click="activePanel = null">
+      <div 
+        class="drag-handle flex shrink-0 cursor-pointer justify-center pt-4 pb-3 md:hidden touch-none"
+        @click="activePanel = null"
+      >
         <div class="h-1.5 w-12 rounded-full bg-slate-600"></div>
       </div>
       
@@ -289,13 +298,13 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-// Inject pipeline state
 const processor = inject<any>('chapterProcessor');
 const {
   chapterPages,
   pageCache,
   currentPageIndex,
   isProcessingChapter,
+  isLoading,
   goToPage,
   cacheHitCount,
   showCacheToast
@@ -356,6 +365,62 @@ const activePanel = ref<'settings' | 'translations' | null>(null);
 const togglePanel = (panel: 'settings' | 'translations') => {
   activePanel.value = activePanel.value === panel ? null : panel;
 };
+
+// Touch gestures for mobile bottom sheet swipe-to-close
+const touchStartY = ref(0);
+const touchDeltaY = ref(0);
+const isDraggingPanel = ref(false);
+
+const handlePanelTouchStart = (e: TouchEvent) => {
+  if (window.innerWidth >= 768) return;
+  
+  const target = e.target as HTMLElement;
+  const isDragHandle = target.closest('.drag-handle') !== null;
+  
+  const scrollEl = (e.currentTarget as HTMLElement).querySelector('.overflow-y-auto');
+  const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+  
+  if (isDragHandle || scrollTop <= 0) {
+    touchStartY.value = e.touches[0].clientY;
+    touchDeltaY.value = 0;
+    isDraggingPanel.value = true;
+  }
+};
+
+const handlePanelTouchMove = (e: TouchEvent) => {
+  if (!isDraggingPanel.value) return;
+  
+  const currentY = e.touches[0].clientY;
+  const delta = currentY - touchStartY.value;
+  
+  if (delta > 0) {
+    touchDeltaY.value = delta;
+    if (e.cancelable) {
+      e.preventDefault(); // Prevents native pull-to-refresh
+    }
+  } else {
+    isDraggingPanel.value = false;
+    touchDeltaY.value = 0;
+  }
+};
+
+const handlePanelTouchEnd = () => {
+  if (!isDraggingPanel.value) return;
+  isDraggingPanel.value = false;
+  if (touchDeltaY.value > 80) {
+    activePanel.value = null;
+  }
+  touchDeltaY.value = 0;
+};
+
+const drawerStyle = computed(() => {
+  if (isDraggingPanel.value && touchDeltaY.value > 0 && activePanel.value === 'translations') {
+    return {
+      transform: `translateY(${touchDeltaY.value}px)`
+    };
+  }
+  return {};
+});
 
 // --- Selection & Hover State ---
 const selectedItemId = ref<string | undefined>(undefined);
@@ -420,7 +485,10 @@ const showTopBarTemp = () => {
   }, 2500);
 };
 const handleMouseMove = (e: MouseEvent) => {
-  if (e.clientY < 80) {
+  const threshold = 80;
+  const isNearTop = e.clientY < threshold;
+  const isNearRight = e.clientX > window.innerWidth - threshold;
+  if (isNearTop || isNearRight) {
     showTopBarTemp();
   }
 };

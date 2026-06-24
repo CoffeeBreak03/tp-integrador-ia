@@ -119,8 +119,11 @@ export function useChapterProcessor() {
         const cacheResult = await checkCache(fileHash);
         if (cacheResult.cached && cacheResult.data && cacheResult.data.pages.length > 0) {
           console.log('[CACHE] Cache HIT for image:', fileHash);
-          cachedPage.translations = cacheResult.data.pages[0].translations;
-          cachedPage.translationStatus = 'success';
+          pageCache.value.set(0, {
+            ...cachedPage,
+            translations: cacheResult.data.pages[0].translations,
+            translationStatus: 'success'
+          });
           cacheHitCount.value = 1;
           showCacheToast.value = true;
           setTimeout(() => { showCacheToast.value = false; }, 3500);
@@ -140,8 +143,11 @@ export function useChapterProcessor() {
 
     try {
       const result = await processPage(imageDataUrl);
-      cachedPage.translations = result.translations || [];
-      cachedPage.translationStatus = 'success';
+      pageCache.value.set(0, {
+        ...cachedPage,
+        translations: result.translations || [],
+        translationStatus: 'success'
+      });
 
       if (fileHash && fileType === 'image' && cachedPage.translations.length > 0) {
         try {
@@ -165,9 +171,12 @@ export function useChapterProcessor() {
       errorMessage.value = error instanceof Error
         ? error.message
         : 'Error desconocido al procesar la imagen';
-      cachedPage.translationStatus = 'error';
-      cachedPage.hasError = true;
-      cachedPage.errorMessage = errorMessage.value;
+      pageCache.value.set(0, {
+        ...cachedPage,
+        translationStatus: 'error',
+        hasError: true,
+        errorMessage: errorMessage.value
+      });
     } finally {
       isLoading.value = false;
       stopLoadingTimer();
@@ -307,9 +316,12 @@ export function useChapterProcessor() {
           const result = await detectPage(chapterPages.value[i]);
           if (chapterProcessingAborted) break;
 
-          cached.boxes = result.boxes;
-          cached.croppedBubbles = result.croppedBubbles;
-          cached.detectionStatus = 'success';
+          pageCache.value.set(i, {
+            ...cached,
+            boxes: result.boxes,
+            croppedBubbles: result.croppedBubbles,
+            detectionStatus: 'success'
+          });
           console.log('[PIPELINE] Page', i + 1, 'detection complete, boxes:', result.boxes.length);
 
           triggerTranslationStep();
@@ -320,10 +332,13 @@ export function useChapterProcessor() {
           const msg = error instanceof Error ? error.message : String(error);
           const isTimeout = /502|504|timeout|limit/i.test(msg);
 
-          cached.detectionStatus = 'error';
-          cached.hasError = true;
-          cached.errorType = isTimeout ? 'timeout' : 'other';
-          cached.errorMessage = msg;
+          pageCache.value.set(i, {
+            ...cached,
+            detectionStatus: 'error',
+            hasError: true,
+            errorType: isTimeout ? 'timeout' : 'other',
+            errorMessage: msg
+          });
 
           if (i === currentPageIndex.value) {
             errorMessage.value = msg;
@@ -384,11 +399,14 @@ export function useChapterProcessor() {
 
           if (chapterProcessingAborted) break;
 
-          cached.translations = result.translations;
-          cached.contexto = result.contexto;
-          cached.translationStatus = 'success';
-          cached.hasError = false;
-          cached.errorMessage = undefined;
+          pageCache.value.set(i, {
+            ...cached,
+            translations: result.translations,
+            contexto: result.contexto,
+            translationStatus: 'success',
+            hasError: false,
+            errorMessage: undefined
+          });
 
           if (i === currentPageIndex.value) {
             errorMessage.value = null;
@@ -404,10 +422,13 @@ export function useChapterProcessor() {
           const msg = error instanceof Error ? error.message : String(error);
           const isTimeout = /502|504|timeout|limit/i.test(msg);
 
-          cached.translationStatus = 'error';
-          cached.hasError = true;
-          cached.errorType = isTimeout ? 'timeout' : 'other';
-          cached.errorMessage = msg;
+          pageCache.value.set(i, {
+            ...cached,
+            translationStatus: 'error',
+            hasError: true,
+            errorType: isTimeout ? 'timeout' : 'other',
+            errorMessage: msg
+          });
 
           if (i === currentPageIndex.value) {
             errorMessage.value = msg;
@@ -446,15 +467,21 @@ export function useChapterProcessor() {
     }
 
     if (cached.detectionStatus === 'error' || !cached.boxes || cached.boxes.length === 0) {
-      cached.detectionStatus = 'idle';
-      cached.translationStatus = 'idle';
-      cached.hasError = false;
+      pageCache.value.set(idx, {
+        ...cached,
+        detectionStatus: 'idle',
+        translationStatus: 'idle',
+        hasError: false
+      });
       isProcessingChapter.value = true;
       runDetectionChain();
       runTranslationChain();
     } else {
-      cached.translationStatus = 'idle';
-      cached.hasError = false;
+      pageCache.value.set(idx, {
+        ...cached,
+        translationStatus: 'idle',
+        hasError: false
+      });
       isProcessingChapter.value = true;
       runTranslationChain();
     }
