@@ -53,19 +53,27 @@
                 :id="'translation-box-' + pageIndex + '-' + item.id"
                 :style="{
                   ...styleFromBox(item.box),
-                  fontSize: getBoxFontSize(item.box, item.texto_traducido)
+                  fontSize: getBoxFontSize(item.box, item.texto_traducido),
+                  fontFamily: fontFamily && fontFamily !== 'sans-serif' ? fontFamily : undefined,
+                  backgroundColor: isBgCustomized ? `color-mix(in srgb, ${activeBgColor} ${Math.round((bgOpacity ?? 0.95) * 100)}%, transparent)` : undefined
                 }"
                 @click="$emit('selectBox', { pageIndex, item })"
                 @mouseenter="$emit('hoverBox', pageIndex + '-' + item.id)"
                 @mouseleave="$emit('hoverBox', undefined)"
-                class="absolute rounded-lg border-2 bg-white/95 p-1 leading-tight shadow-md dark:bg-slate-950/95 cursor-pointer transition-all pointer-events-auto"
+                class="absolute rounded-lg border-2 p-1 leading-tight shadow-md cursor-pointer transition-all pointer-events-auto"
                 :class="{
                   'border-blue-500 ring-2 ring-blue-400/40 z-20': pageIndex + '-' + item.id === selectedItemId,
                   'border-blue-400 ring-2 ring-blue-400/20 z-10': pageIndex + '-' + item.id === hoveredItemId && pageIndex + '-' + item.id !== selectedItemId,
                   'border-transparent hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 hover:z-10': pageIndex + '-' + item.id !== selectedItemId && pageIndex + '-' + item.id !== hoveredItemId,
+                  'bg-white/95 dark:bg-slate-950/95': !isBgCustomized
                 }"
               >
-                <p class="font-semibold text-slate-900 dark:text-slate-100">{{ item.texto_traducido }}</p>
+                <p 
+                  :style="{ color: textColor && textColor !== 'default' ? textColor : undefined }" 
+                  class="font-semibold text-slate-900 dark:text-slate-100"
+                >
+                  {{ item.texto_traducido }}
+                </p>
               </div>
             </template>
           </div>
@@ -105,6 +113,11 @@ const props = defineProps<{
   hasError?: boolean;
   flat?: boolean;
   fitMode?: 'height' | 'width';
+  fontFamily?: string;
+  textColor?: string;
+  bgColor?: string;
+  bgOpacity?: number;
+  fontSizeScale?: number;
 }>();
 
 const emit = defineEmits<{
@@ -113,6 +126,20 @@ const emit = defineEmits<{
   (e: 'imageLoaded', payload: { aspectRatio: number }): void;
   (e: 'retry'): void;
 }>();
+
+const isDark = ref(typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true);
+const activeBgColor = computed(() => {
+  if (props.bgColor && props.bgColor !== 'default') {
+    return props.bgColor;
+  }
+  return isDark.value ? '#020617' : '#ffffff';
+});
+
+const isBgCustomized = computed(() => {
+  const hasCustomColor = props.bgColor && props.bgColor !== 'default';
+  const hasCustomOpacity = props.bgOpacity !== undefined && props.bgOpacity !== 0.95;
+  return hasCustomColor || hasCustomOpacity;
+});
 
 const imgRef = ref<HTMLImageElement | null>(null);
 const wrapperRef = ref<HTMLElement | null>(null);
@@ -177,6 +204,8 @@ const getBoxFontSize = (box: [number, number, number, number], text: string) => 
   const minFont = isMobile.value ? 1.1 : 0.6;
   const maxFont = isMobile.value ? 2.5 : 1.4;
   fontSizeCqw = Math.max(minFont, Math.min(maxFont, fontSizeCqw));
-  return `${fontSizeCqw.toFixed(2)}cqw`;
+  
+  const scale = props.fontSizeScale ?? 1.0;
+  return `${(fontSizeCqw * scale).toFixed(2)}cqw`;
 };
 </script>
