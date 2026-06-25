@@ -75,6 +75,11 @@
             :fitMode="fitMode"
             :selectedItemId="selectedItemId"
             :hoveredItemId="hoveredItemId"
+            :fontFamily="overlayFontFamily"
+            :fontSizeScale="overlayFontSizeScale"
+            :textColor="overlayTextColor"
+            :bgColor="overlayBgColor"
+            :bgOpacity="overlayBgOpacity"
             flat
             @imageLoaded="onImageLoaded"
             @selectBox="handleBoxSelect"
@@ -99,6 +104,11 @@
                 :fitMode="fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
+                :fontFamily="overlayFontFamily"
+                :fontSizeScale="overlayFontSizeScale"
+                :textColor="overlayTextColor"
+                :bgColor="overlayBgColor"
+                :bgOpacity="overlayBgOpacity"
                 flat
                 @imageLoaded="onImageLoaded"
                 @selectBox="handleBoxSelect"
@@ -129,6 +139,11 @@
                 :fitMode="fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
+                :fontFamily="overlayFontFamily"
+                :fontSizeScale="overlayFontSizeScale"
+                :textColor="overlayTextColor"
+                :bgColor="overlayBgColor"
+                :bgOpacity="overlayBgOpacity"
                 flat
                 @imageLoaded="onImageLoaded"
                 @selectBox="handleBoxSelect"
@@ -180,19 +195,39 @@
     </div>
 
     <!-- Sidebars & Overlays -->
-    <!-- Settings Drawer (Right) -->
+    <!-- Settings Drawer / Bottom Sheet -->
     <div 
-      class="fixed inset-y-0 right-0 z-50 w-full sm:w-80 h-[100dvh] transform bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl transition-transform duration-300"
-      :class="activePanel === 'settings' ? 'translate-x-0' : 'translate-x-full'"
+      class="fixed z-50 flex transform flex-col bg-slate-900/95 shadow-2xl backdrop-blur-xl inset-x-0 bottom-0 h-[50dvh] md:h-[100dvh] md:bottom-auto md:left-auto md:top-0 md:inset-y-0 md:right-0 md:w-80 md:translate-y-0 overscroll-y-contain"
+      :class="[
+        activePanel === 'settings' 
+          ? 'translate-y-0 md:translate-x-0' 
+          : 'translate-y-full md:translate-y-0 md:translate-x-full',
+        isDraggingPanel ? 'transition-none' : 'transition-transform duration-300'
+      ]"
+      :style="drawerStyle"
+      @touchstart="handlePanelTouchStart"
+      @touchmove="handlePanelTouchMove"
+      @touchend="handlePanelTouchEnd"
     >
-      <div class="mb-6 flex items-center justify-between">
-        <h2 class="text-xl font-bold">Configuración</h2>
+      <!-- Bottom sheet drag handle (mobile only) -->
+      <div 
+        class="drag-handle flex shrink-0 cursor-pointer justify-center pt-4 pb-3 md:hidden touch-none"
+        @click="activePanel = null"
+      >
+        <div class="h-1.5 w-12 rounded-full bg-slate-600"></div>
+      </div>
+      
+      <div class="absolute right-4 top-4 hidden md:block">
         <button @click="activePanel = null" class="rounded-full p-2 hover:bg-slate-800 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
 
-      <div class="space-y-6">
+      <div class="mb-4 shrink-0 px-6 pt-6 md:pt-8 flex items-center justify-between">
+        <h2 class="text-xl font-bold">Configuración</h2>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-6 pb-6 space-y-6 scrollbar-thin">
         <!-- Layout Mode -->
         <div>
           <h3 class="mb-3 text-sm font-medium text-slate-400">Layout</h3>
@@ -244,6 +279,77 @@
             <input type="checkbox" v-model="doublePageCover" class="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-500 accent-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900" />
             Primera página es portada
           </label>
+        </div>
+
+        <hr class="border-slate-700/50" />
+        
+        <!-- Overlay Appearance -->
+        <div class="space-y-4">
+          <h3 class="text-sm font-medium text-slate-400">Estética de Overlays</h3>
+          
+          <!-- Font Family -->
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-slate-300">Fuente</span>
+            <div class="flex items-center gap-2">
+              <select v-model="overlayFontFamily" class="rounded-lg bg-slate-800 p-1.5 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 border-none">
+                <option value="sans-serif">Sans-serif</option>
+                <option value="serif">Serif</option>
+                <option value="monospace">Monospace</option>
+                <option value="'Comic Sans MS', cursive, sans-serif">Comic</option>
+              </select>
+              <button @click="overlayFontFamily = 'sans-serif'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Font Size Scale -->
+          <div>
+            <div class="mb-2 flex items-center justify-between text-sm font-medium text-slate-300">
+              <span>Tamaño de texto: {{ overlayFontSizeScale.toFixed(1) }}x</span>
+              <button @click="overlayFontSizeScale = 1.0" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+              </button>
+            </div>
+            <div class="flex items-center gap-4">
+              <input type="range" v-model.number="overlayFontSizeScale" min="0.5" max="2.0" step="0.1" class="flex-1 accent-blue-500" />
+            </div>
+          </div>
+
+          <!-- Text Color -->
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-slate-300">Color de texto</span>
+            <div class="flex items-center gap-2">
+              <input type="color" :value="overlayTextColor === 'default' ? defaultTextColor : overlayTextColor" @input="updateTextColor" class="h-8 w-14 cursor-pointer rounded bg-slate-800 p-0 border-0" />
+              <button @click="overlayTextColor = 'default'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Background Color -->
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-slate-300">Color de fondo</span>
+            <div class="flex items-center gap-2">
+              <input type="color" :value="overlayBgColor === 'default' ? defaultBgColor : overlayBgColor" @input="updateBgColor" class="h-8 w-14 cursor-pointer rounded bg-slate-800 p-0 border-0" />
+              <button @click="overlayBgColor = 'default'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Background Opacity -->
+          <div>
+            <div class="mb-2 flex items-center justify-between text-sm font-medium text-slate-300">
+              <span>Opacidad de fondo: {{ Math.round(overlayBgOpacity * 100) }}%</span>
+              <button @click="overlayBgOpacity = 0.95" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+              </button>
+            </div>
+            <div class="flex items-center gap-4">
+              <input type="range" v-model.number="overlayBgOpacity" min="0" max="1" step="0.05" class="flex-1 accent-blue-500" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -339,6 +445,36 @@ const zoomPercent = ref<number>(Math.max(100, getSavedPref('zoom', 100)));
 const doublePageCover = ref<boolean>(getSavedPref('doubleCover', true));
 const showOverlay = ref<boolean>(getSavedPref('overlay', true));
 
+const overlayFontFamily = ref<string>(getSavedPref('overlayFontFamily', 'sans-serif'));
+const overlayFontSizeScale = ref<number>(getSavedPref('overlayFontSizeScale', 1.0));
+const overlayTextColor = ref<string>(getSavedPref('overlayTextColor', 'default'));
+const overlayBgColor = ref<string>(getSavedPref('overlayBgColor', 'default'));
+const overlayBgOpacity = ref<number>(getSavedPref('overlayBgOpacity', 0.95));
+
+// Computed default colors based on system theme (dark/light)
+const defaultTextColor = computed(() => {
+  const isDark = typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true;
+  return isDark ? '#f1f5f9' : '#0f172a';
+});
+const defaultBgColor = computed(() => {
+  const isDark = typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true;
+  return isDark ? '#020617' : '#ffffff';
+});
+
+const updateTextColor = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target) {
+    overlayTextColor.value = target.value;
+  }
+};
+
+const updateBgColor = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target) {
+    overlayBgColor.value = target.value;
+  }
+};
+
 const currentAspectRatio = ref(0.7);
 
 const onImageLoaded = ({ aspectRatio }: { aspectRatio: number }) => {
@@ -358,13 +494,21 @@ watch(minZoom, (newMin) => {
   }
 });
 
-watch([layoutMode, readingDirection, fitMode, zoomPercent, doublePageCover, showOverlay], () => {
+watch([
+  layoutMode, readingDirection, fitMode, zoomPercent, doublePageCover, showOverlay,
+  overlayFontFamily, overlayFontSizeScale, overlayTextColor, overlayBgColor, overlayBgOpacity
+], () => {
   setSavedPref('layout', layoutMode.value);
   setSavedPref('direction', readingDirection.value);
   setSavedPref('fit', fitMode.value);
   setSavedPref('zoom', zoomPercent.value);
   setSavedPref('doubleCover', doublePageCover.value);
   setSavedPref('overlay', showOverlay.value);
+  setSavedPref('overlayFontFamily', overlayFontFamily.value);
+  setSavedPref('overlayFontSizeScale', overlayFontSizeScale.value);
+  setSavedPref('overlayTextColor', overlayTextColor.value);
+  setSavedPref('overlayBgColor', overlayBgColor.value);
+  setSavedPref('overlayBgOpacity', overlayBgOpacity.value);
 }, { deep: true });
 
 // --- UI State ---
@@ -636,7 +780,7 @@ const cascadeScrollRef = ref<HTMLElement | null>(null);
 let currentObserver: IntersectionObserver | null = null;
 
 const onCascadeScroll = () => {
-  showTopBarTemp();
+  // No-op: Do not show top bar on scroll in cascade mode to keep reading distraction-free
 };
 
 const setupObservers = () => {
@@ -681,7 +825,7 @@ onUnmounted(() => {
 
 // --- Keyboard & Tap Zones ---
 const handleTapZone = (zone: 'left' | 'center' | 'right') => {
-  if (zone === 'center') {
+  if (zone === 'center' || layoutMode.value === 'cascade') {
     isTopBarVisible.value = !isTopBarVisible.value;
     return;
   }
@@ -698,6 +842,12 @@ const onImageClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement;
   // Ignore clicks on translation boxes and other UI overlays
   if (target.closest('.absolute.rounded-lg.border-2')) return;
+  
+  // Close active drawers if clicking on the image
+  if (activePanel.value !== null) {
+    activePanel.value = null;
+    return;
+  }
   
   let didDeselect = false;
   if (selectedItemId.value !== undefined) {
@@ -727,9 +877,18 @@ const onBackgroundClick = (e: MouseEvent) => {
   if (target.closest('.cascade-page-container')) return;
   if (target.closest('.absolute.rounded-lg.border-2')) return;
   
+  // Close any active drawers if clicking outside
+  if (activePanel.value !== null) {
+    activePanel.value = null;
+    return;
+  }
+  
   if (selectedItemId.value !== undefined) {
     selectedItemId.value = undefined;
   }
+  
+  // Clicking outside the image always toggles the top bar/menu visibility, never changes page
+  isTopBarVisible.value = !isTopBarVisible.value;
 };
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -770,7 +929,6 @@ onMounted(() => {
 });
 
 watch(currentPageIndex, () => {
-  showTopBarTemp();
   selectedItemId.value = undefined;
   hoveredItemId.value = undefined;
 });
