@@ -1,6 +1,6 @@
 <template>
   <div :class="['relative overflow-hidden', flat ? 'h-full w-full flex items-center justify-center' : 'w-full rounded-3xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/80']">
-    <div :class="['relative', flat ? 'h-full flex items-center justify-center' : 'w-full min-h-[320px] bg-slate-100 dark:bg-slate-900']">
+    <div :class="['relative', flat ? 'h-full w-full flex items-center justify-center' : 'w-full min-h-[320px] bg-slate-100 dark:bg-slate-900']">
       <div v-if="!imageData" class="flex h-full min-h-[320px] items-center justify-center p-6 text-center text-sm text-slate-600 dark:text-slate-400">
         Carga una imagen o PDF para ver las capas de traducción superpuestas.
       </div>
@@ -55,25 +55,26 @@
                   ...styleFromBox(item.box),
                   fontSize: getBoxFontSize(item.box, item.texto_traducido),
                   fontFamily: fontFamily && fontFamily !== 'sans-serif' ? fontFamily : undefined,
-                  backgroundColor: isBgCustomized ? `color-mix(in srgb, ${activeBgColor} ${Math.round((bgOpacity ?? 0.95) * 100)}%, transparent)` : undefined
+                  backgroundColor: isBgCustomized ? `color-mix(in srgb, ${activeBgColor} ${Math.round((bgOpacity ?? 0.95) * 100)}%, transparent)` : undefined,
+                  '--orig-w': `${(item.box[3] - item.box[1]) / 10}%`,
+                  '--orig-h': `${(item.box[2] - item.box[0]) / 10}%`
                 }"
                 @click="$emit('selectBox', { pageIndex, item })"
                 @mouseenter="$emit('hoverBox', pageIndex + '-' + item.id)"
                 @mouseleave="$emit('hoverBox', undefined)"
-                class="absolute rounded-lg border-2 p-1 leading-tight shadow-md cursor-pointer transition-all pointer-events-auto"
+                class="absolute rounded-lg border-2 p-1 leading-tight shadow-md cursor-pointer transition-all pointer-events-auto flex items-center justify-center text-center overflow-hidden break-words hyphens-auto"
                 :class="{
-                  'border-blue-500 ring-2 ring-blue-400/40 z-20': pageIndex + '-' + item.id === selectedItemId,
-                  'border-blue-400 ring-2 ring-blue-400/20 z-10': pageIndex + '-' + item.id === hoveredItemId && pageIndex + '-' + item.id !== selectedItemId,
+                  'border-blue-500 ring-2 ring-blue-400/40 z-20 box-expand-active': pageIndex + '-' + item.id === selectedItemId,
+                  'border-blue-400 ring-2 ring-blue-400/20 z-10 box-expand-active': pageIndex + '-' + item.id === hoveredItemId && pageIndex + '-' + item.id !== selectedItemId,
                   'border-transparent hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 hover:z-10': pageIndex + '-' + item.id !== selectedItemId && pageIndex + '-' + item.id !== hoveredItemId,
                   'bg-white/95 dark:bg-slate-950/95': !isBgCustomized
                 }"
               >
                 <p 
                   :style="{ color: textColor && textColor !== 'default' ? textColor : undefined }" 
-                  class="font-semibold text-slate-900 dark:text-slate-100"
-                >
-                  {{ item.texto_traducido }}
-                </p>
+                  class="font-semibold text-slate-900 dark:text-slate-100 m-0"
+                  v-html="hyphenate(item.texto_traducido)"
+                ></p>
               </div>
             </template>
           </div>
@@ -100,6 +101,13 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', updateMobile);
 });
+
+// Función para insertar guiones suaves (\u00AD) para un wrap inteligente
+const hyphenate = (text: string | undefined) => {
+  if (!text) return '';
+  // Se inserta \u00AD heurísticamente
+  return text.replace(/([aeiouáéíóú][nrsld]?)([bcdfghjklmnñpqrstvwxyz][aeiouáéíóú])/gi, '$1&shy;$2');
+};
 
 const props = defineProps<{
   pageIndex: number;
@@ -209,3 +217,15 @@ const getBoxFontSize = (box: [number, number, number, number], text: string) => 
   return `${(fontSizeCqw * scale).toFixed(2)}cqw`;
 };
 </script>
+
+<style scoped>
+.box-expand-active {
+  height: max-content !important;
+  min-height: var(--orig-h);
+  width: fit-content !important;
+  min-width: var(--orig-w);
+  max-width: calc(var(--orig-w) + 15%);
+  /* Asegurar que el contenido no quede cortado al expandirse */
+  overflow: visible !important;
+}
+</style>

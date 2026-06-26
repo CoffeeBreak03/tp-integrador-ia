@@ -384,7 +384,7 @@ sequenceDiagram
 * **Optimización de Latencia y Filtro Inteligente**:
   * **Llamadas Multimodales**: Configuración de `detail: 'low'` en las llamadas de imágenes para la API de visión de GPT-4o, lo que redujo drásticamente el tiempo de respuesta.
   * **Filtro de Duplicados Avanzado**: Se extendió la limpieza de solapamientos en `orchestrator.ts` implementando una comparación basada en distancia de Levenshtein (umbral de similitud > 0.6) y coincidencias directas en las traducciones al español. Esto evita globos duplicados causados por sutiles diferencias de OCR (por ejemplo, cuando se lee furigana adjunto a un kanji).
+  * **Descarga / Exportación a ZIP**: Funcionalidad 100% *client-side* para exportar el capítulo traducido completo a un archivo ZIP. Renderiza las traducciones sobre las imágenes originales mediante un lienzo `<canvas>` (aplicando los ajustes visuales elegidos por el usuario) e implementa un algoritmo heurístico de auto-ajuste de texto (reducción de tamaño, expansión horizontal, word-break) para garantizar que el texto quepa en el globo. Solo disponible una vez que se termina de procesar todo el capítulo.
 
 ### ⏳ Funcionalidades Pendientes / No Implementadas
 * **Edición Directa de Traducciones**: Actualmente el usuario puede ver e identificar los globos de diálogo traducidos en el panel lateral y el lector, pero no cuenta con la opción de editar manualmente el texto traducido si detecta algún error de la IA.
-* **Descarga / Exportación**: No se ha desarrollado la funcionalidad para exportar o descargar el capítulo traducido completo a un nuevo archivo ZIP o PDF con los overlays incrustados en las imágenes.

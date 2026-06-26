@@ -41,6 +41,21 @@
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
+        
+        <!-- Botón de descarga -->
+        <button
+          class="group relative ml-2 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
+          :class="isChapterProcessingComplete && !isExporting ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-slate-800 text-slate-500 cursor-not-allowed'"
+          :disabled="!isChapterProcessingComplete || isExporting"
+          @click="handleExport"
+        >
+          <svg v-if="!isExporting" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          <div v-else class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+          
+          <div class="tooltip right-full top-1/2 mr-2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hidden md:block whitespace-nowrap">
+            {{ isExporting ? 'Exportando...' : (!isChapterProcessingComplete ? 'Procesando capítulo...' : 'Exportar capítulo (ZIP)') }}
+          </div>
+        </button>
       </div>
     </div>
 
@@ -51,6 +66,17 @@
     >
       <div class="rounded-full bg-blue-600 px-6 py-3 font-semibold text-white shadow-xl shadow-blue-900/20 ring-1 ring-blue-500">
         ✨ Recuperadas {{ cacheHitCount }} página{{ cacheHitCount !== 1 ? 's' : '' }} de la caché
+      </div>
+    </div>
+
+    <!-- Export Progress Toast -->
+    <div
+      class="pointer-events-none absolute left-1/2 top-20 z-50 flex -translate-x-1/2 transform items-center justify-center transition-all duration-500 ease-in-out"
+      :class="isExporting ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'"
+    >
+      <div class="rounded-full bg-slate-800 px-6 py-3 font-semibold text-white shadow-xl shadow-slate-900/50 ring-1 ring-slate-700 flex items-center gap-3">
+        <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
+        <span>Exportando ZIP... {{ exportProgress.current }} de {{ exportProgress.total }} páginas</span>
       </div>
     </div>
 
@@ -120,7 +146,7 @@
       </div>
 
       <!-- Cascade Mode -->      <div v-else-if="layoutMode === 'cascade'" class="h-full w-full overflow-y-auto" ref="cascadeScrollRef" @scroll="onCascadeScroll">
-        <div class="mx-auto flex flex-col items-center py-8" :style="{ width: cascadeWidth }">
+        <div class="mx-auto flex flex-col items-center py-8" :style="{ width: cascadeWidth, maxWidth: '1200px' }">
           <div 
             v-for="(page, i) in chapterPages" 
             :key="i"
@@ -136,7 +162,7 @@
                 :showOverlay="showOverlay"
                 :isLoading="(isProcessingChapter || isLoading) && pageCache.get(Number(i))?.translationStatus !== 'success' && !pageCache.get(Number(i))?.hasError"
                 :hasError="pageCache.get(Number(i))?.hasError"
-                :fitMode="fitMode"
+                :fitMode="layoutMode === 'cascade' ? 'width' : fitMode"
                 :selectedItemId="selectedItemId"
                 :hoveredItemId="hoveredItemId"
                 :fontFamily="overlayFontFamily"
@@ -394,6 +420,35 @@
       </div>
     </div>
 
+    <!-- Export Success Modal -->
+    <div v-if="showExportSuccessModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+      <div class="w-full max-w-md rounded-2xl bg-slate-800 p-6 shadow-2xl border border-slate-700">
+        <div class="mb-4 flex items-center justify-center">
+          <div class="rounded-full bg-green-500/20 p-3 text-green-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          </div>
+        </div>
+        <h3 class="mb-2 text-center text-xl font-bold text-white">¡Descarga Completada!</h3>
+        <p class="mb-4 text-center text-sm text-slate-300">
+          Tu capítulo ha sido exportado exitosamente. Para leerlo:
+        </p>
+        <ol class="mb-6 list-decimal pl-5 text-sm text-slate-300 space-y-2">
+          <li>Extrae/descomprime el archivo <strong>.zip</strong> que acabas de descargar.</li>
+          <li>Abre la carpeta extraída.</li>
+          <li>Haz doble clic en el archivo <strong>index.html</strong> para abrirlo en tu navegador.</li>
+        </ol>
+        <button 
+          @click="showExportSuccessModal = false" 
+          class="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition-colors hover:bg-blue-500"
+        >
+          ¡Entendido!
+        </button>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -401,6 +456,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, inject, nextTick } from 'vue';
 import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
+import { exportChapterToZip, downloadBlob } from '@/lib/exporter';
 
 const props = defineProps<{
   fileName?: string;
@@ -422,6 +478,68 @@ const {
   showCacheToast,
   handleRetry
 } = processor;
+
+const isExporting = ref(false);
+const exportProgress = ref({ current: 0, total: 0 });
+const showExportSuccessModal = ref(false);
+
+const isChapterProcessingComplete = computed(() => {
+  if (chapterPages.value.length === 0) return false;
+  if (isProcessingChapter.value || isLoading.value) return false;
+  
+  for (let i = 0; i < chapterPages.value.length; i++) {
+    const page = pageCache.value.get(i);
+    if (!page) return false;
+    if (page.translationStatus === 'idle' || page.translationStatus === 'loading') {
+      return false;
+    }
+  }
+  
+  // Also check if there's at least one successfully translated page
+  let hasSuccess = false;
+  for (let i = 0; i < chapterPages.value.length; i++) {
+    const page = pageCache.value.get(i);
+    if (page && page.translationStatus === 'success' && !page.hasError && page.translations.length > 0) {
+      hasSuccess = true;
+      break;
+    }
+  }
+  
+  return hasSuccess;
+});
+
+const handleExport = async () => {
+  if (!isChapterProcessingComplete.value) return;
+  
+  isExporting.value = true;
+  exportProgress.value = { current: 0, total: chapterPages.value.length };
+  
+  try {
+    const textColor = overlayTextColor.value === 'default' ? defaultTextColor.value : overlayTextColor.value;
+    const bgColor = overlayBgColor.value === 'default' ? defaultBgColor.value : overlayBgColor.value;
+    
+    const blob = await exportChapterToZip(
+      chapterPages.value,
+      pageCache.value,
+      {
+        fontFamily: overlayFontFamily.value,
+        fontSizeScale: overlayFontSizeScale.value,
+        textColor,
+        bgColor,
+        bgOpacity: overlayBgOpacity.value
+      },
+      (current, total) => {
+        exportProgress.value = { current, total };
+      }
+    );
+    downloadBlob(blob, 'capitulo_traducido.zip');
+    showExportSuccessModal.value = true;
+  } catch (err) {
+    console.error('Error al exportar capítulo:', err);
+  } finally {
+    isExporting.value = false;
+  }
+};
 
 // --- Local State (Persisted) ---
 const getSavedPref = <T>(key: string, def: T): T => {
