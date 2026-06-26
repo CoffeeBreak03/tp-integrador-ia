@@ -6,6 +6,7 @@ import { validateTranslationContract } from './lib/validate-contract';
 interface ProcessRequest {
   imageBase64: string;
   contexto?: string;
+  targetLanguage?: string;
 }
 
 export const processPage = async (req: Request, res: Response): Promise<void> => {
@@ -18,7 +19,7 @@ export const processPage = async (req: Request, res: Response): Promise<void> =>
 
     const azureClient = getAzureClient();
     const orchestrator = new PipelineOrchestrator(azureClient);
-    const result = await orchestrator.processMangaImage(body.imageBase64, body.contexto);
+    const result = await orchestrator.processMangaImage(body.imageBase64, body.contexto, body.targetLanguage);
     const validated = validateTranslationContract(result.translations);
 
     res.status(200).json({

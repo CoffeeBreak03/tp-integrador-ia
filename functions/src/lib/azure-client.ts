@@ -155,9 +155,9 @@ export class AzureClient {
    *
    * Si no se provee contexto, retorna el mismo formato con contexto vacío.
    */
-  async callOcrAndTranslation(croppedBubbles: CroppedBubble[], contexto?: string): Promise<string> {
+  async callOcrAndTranslation(croppedBubbles: CroppedBubble[], contexto?: string, targetLanguage: string = 'es'): Promise<string> {
     const startTime = Date.now();
-    console.log('[AZURE_GPT4O] Starting OCR and Translation for', croppedBubbles.length, 'bubbles');
+    console.log('[AZURE_GPT4O] Starting OCR and Translation for', croppedBubbles.length, 'bubbles, target language:', targetLanguage);
     if (contexto) {
       console.log('[AZURE_GPT4O] Chapter context provided:', contexto.length, 'chars');
     }
@@ -189,14 +189,17 @@ export class AzureClient {
     // Construir el contenido multimodal: una entrada de texto + una imagen por globo
     const userContent: any[] = [];
 
+    const targetLangName = targetLanguage === 'en' ? 'English' : 'Spanish';
+    const targetLangKey = targetLanguage === 'en' ? 'traduccion_ingles' : 'traduccion_espanol';
+
     // Instrucción principal con formato de respuesta esperado
     let instructionText =
       `You will receive ${croppedBubbles.length} cropped manga speech bubble image(s), ` +
-      `each labelled with its ID. Read the Japanese text in each bubble and translate it to Spanish.\n\n` +
+      `each labelled with its ID. Read the Japanese text in each bubble and translate it to ${targetLangName}.\n\n` +
       `Return ONLY a valid JSON object (no markdown, no extra text) with this exact structure:\n` +
       `{\n` +
-      `  "contexto": "<updated chapter context summarizing key story elements, character names, tone and events so far, max 2000 chars>",\n` +
-      `  "traducciones": [{"id": <id>, "texto_japones": "<japanese text>", "traduccion_espanol": "<spanish translation>"}]\n` +
+      `  "contexto": "<updated chapter context in ${targetLangName} summarizing key story elements, character names, tone and events so far, max 2000 chars>",\n` +
+      `  "traducciones": [{"id": <id>, "texto_japones": "<japanese text>", "${targetLangKey}": "<${targetLangName.toLowerCase()} translation>"}]\n` +
       `}`;
 
     // Si hay contexto previo del capítulo, incluirlo
@@ -227,16 +230,16 @@ export class AzureClient {
       console.log('[AZURE_GPT4O] Sending request to Azure Foundry...');
       
       const systemPrompt = contexto
-        ? 'You are an expert manga OCR and translation engine working on a multi-page chapter. ' +
-          'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
-          'IMPORTANT: If an image does not appear to contain any characters, or if it is a false positive detection, simply return "" (empty string) for both japanese text and spanish translation. ' +
-          'Use the chapter context provided to maintain narrative coherence (consistent names, tone, pronouns). ' +
-          'Update the context field with any new relevant information from this page. ' +
-          'Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.'
-        : 'You are an expert manga OCR and translation engine. ' +
-          'For each speech bubble image provided, extract the exact Japanese text and translate it to Spanish. ' +
-          'IMPORTANT: If an image does not appear to contain any characters, or if it is a false positive detection, simply return "" (empty string) for both japanese text and spanish translation. ' +
-          'Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.';
+        ? `You are an expert manga OCR and translation engine working on a multi-page chapter. ` +
+          `For each speech bubble image provided, extract the exact Japanese text and translate it to ${targetLangName}. ` +
+          `IMPORTANT: If an image does not appear to contain any characters, or if it is a false positive detection, simply return "" (empty string) for both japanese text and translation. ` +
+          `Use the chapter context provided to maintain narrative coherence (consistent names, tone, pronouns). ` +
+          `Update the context field in ${targetLangName} with any new relevant information from this page. ` +
+          `Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.`
+        : `You are an expert manga OCR and translation engine. ` +
+          `For each speech bubble image provided, extract the exact Japanese text and translate it to ${targetLangName}. ` +
+          `IMPORTANT: If an image does not appear to contain any characters, or if it is a false positive detection, simply return "" (empty string) for both japanese text and translation. ` +
+          `Return ONLY a valid JSON object with "contexto" and "traducciones" fields. No markdown, no explanations.`;
 
       const response = await fetch(url, {
         method: 'POST',
@@ -296,7 +299,7 @@ export class AzureClient {
   /**
    * Compatibility wrapper doing text-only translation using GPT-4o
    */
-  async callTranslateModel(text: string): Promise<string> {
+  async callTranslateModel(text: string, targetLanguage: string = 'es'): Promise<string> {
     const startTime = Date.now();
     console.log('[AZURE_GPT4O] Starting standalone translation (compatibility wrapper)');
     
@@ -307,6 +310,8 @@ export class AzureClient {
 
     const url = `${this.config.endpoint.replace(/\/responses$/, '')}/chat/completions`;
     console.log('[AZURE_GPT4O] Azure URL:', url);
+
+    const targetLangName = targetLanguage === 'en' ? 'English' : 'Spanish';
 
     try {
       const response = await fetch(url, {
@@ -320,7 +325,7 @@ export class AzureClient {
           messages: [
             {
               role: 'system',
-              content: 'You are an expert translator. Translate the following text to Spanish, maintaining context and meaning.'
+              content: `You are an expert translator. Translate the following text to ${targetLangName}, maintaining context and meaning.`
             },
             {
               role: 'user',

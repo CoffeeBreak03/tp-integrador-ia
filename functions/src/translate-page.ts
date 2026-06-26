@@ -16,6 +16,7 @@ interface TranslatePageRequest {
     x_max: number;
   }>;
   contexto?: string;
+  targetLanguage?: string;
 }
 
 export const translatePage = async (req: Request, res: Response): Promise<void> => {
@@ -32,7 +33,7 @@ export const translatePage = async (req: Request, res: Response): Promise<void> 
 
     const azureClient = getAzureClient();
     const orchestrator = new PipelineOrchestrator(azureClient);
-    const result = await orchestrator.translatePageOnly(body.croppedBubbles, body.boxes, body.contexto);
+    const result = await orchestrator.translatePageOnly(body.croppedBubbles, body.boxes, body.contexto, body.targetLanguage);
     const validated = validateTranslationContract(result.translations);
 
     res.status(200).json({

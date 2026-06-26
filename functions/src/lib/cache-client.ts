@@ -13,6 +13,7 @@ export interface CachedChapter {
   fileHash: string;
   fileType: string;
   pages: CachedPage[];
+  targetLanguage?: string;
 }
 
 const CONTAINER_NAME = 'translation-cache';
@@ -50,14 +51,15 @@ export class CacheClient {
   /**
    * Verifica si existe un archivo traducido en la caché (Azure o local).
    */
-  async checkCache(fileHash: string): Promise<CachedChapter | null> {
+  async checkCache(fileHash: string, targetLanguage?: string): Promise<CachedChapter | null> {
     const cleanHash = fileHash.trim().toLowerCase();
     if (!/^[a-f0-9]{64}$/.test(cleanHash)) {
       console.warn(`[CACHE] Invalid fileHash provided: ${fileHash}`);
       return null;
     }
 
-    const blobName = `${cleanHash}.json`;
+    const langSuffix = targetLanguage ? `_${targetLanguage}` : '';
+    const blobName = `${cleanHash}${langSuffix}.json`;
 
     // Si Azure está configurado, intentamos buscar en Azure Blob Storage
     if (this.blobServiceClient) {
@@ -106,14 +108,15 @@ export class CacheClient {
   /**
    * Almacena el resultado de la traducción en la caché.
    */
-  async saveCache(data: CachedChapter): Promise<void> {
+  async saveCache(data: CachedChapter, targetLanguage?: string): Promise<void> {
     const cleanHash = data.fileHash.trim().toLowerCase();
     if (!/^[a-f0-9]{64}$/.test(cleanHash)) {
       console.warn(`[CACHE] Refusing to save invalid fileHash: ${data.fileHash}`);
       return;
     }
 
-    const blobName = `${cleanHash}.json`;
+    const langSuffix = targetLanguage ? `_${targetLanguage}` : '';
+    const blobName = `${cleanHash}${langSuffix}.json`;
     const serializedData = JSON.stringify(data, null, 2);
 
     // Guardar en Azure si está configurado

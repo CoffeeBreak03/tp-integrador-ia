@@ -9,7 +9,7 @@
           <svg class="h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
         </div>
         <div class="space-y-2">
-          <p class="text-xl font-bold text-slate-900 dark:text-slate-100">Cargando archivo...</p>
+          <p class="text-xl font-bold text-slate-900 dark:text-slate-100">{{ t('upload.loading') }}</p>
           <p class="text-sm font-medium text-blue-600 dark:text-blue-400 animate-pulse">{{ processingStatus }}</p>
         </div>
       </div>
@@ -25,12 +25,12 @@
             +
           </button>
           <div>
-            <p class="text-lg font-semibold text-slate-900 dark:text-slate-100">Carga tu capítulo o imagen</p>
+            <p class="text-lg font-semibold text-slate-900 dark:text-slate-100">{{ t('upload.title') }}</p>
             <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Soporta imágenes, PDFs multi-página y archivos ZIP con imágenes.
+              {{ t('upload.subtitle') }}
             </p>
             <p class="mt-1 text-xs text-slate-500 dark:text-slate-500">
-              Máximo {{ MAX_PAGES }} páginas por capítulo.
+              {{ t('upload.maxPages', { max: MAX_PAGES }) }}
             </p>
           </div>
         </div>
@@ -47,10 +47,12 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, inject } from 'vue';
 // @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import { calculateFileHash, calculateMultipleFilesHash } from '@/lib/hash';
+
+const { t } = inject<any>('i18n');
 
 const MAX_PAGES = 50;
 const MAX_CANVAS_WIDTH = 1200;
@@ -165,7 +167,7 @@ const handleFileUpload = async (event: Event) => {
   if (!files || files.length === 0) return;
 
   isProcessingFile.value = true;
-  processingStatus.value = 'Iniciando carga...';
+  processingStatus.value = t('upload.starting');
 
   try {
     // Caso: un solo archivo
@@ -174,7 +176,7 @@ const handleFileUpload = async (event: Event) => {
 
       // Calcular el hash del archivo
       try {
-        processingStatus.value = 'Calculando firma del archivo (hashing)...';
+        processingStatus.value = t('upload.hashing');
         const hash = await calculateFileHash(file);
         let fileType = 'image';
         if (file.type === 'application/pdf') {
@@ -188,7 +190,7 @@ const handleFileUpload = async (event: Event) => {
       }
 
       if (file.type === 'application/pdf') {
-        processingStatus.value = 'Renderizando páginas del PDF...';
+        processingStatus.value = t('upload.renderingPdf');
         // PDF multi-página
         const pages = await handlePdfFile(file);
         if (pages.length === 1) {
@@ -201,11 +203,11 @@ const handleFileUpload = async (event: Event) => {
       }
 
       if (file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip')) {
-        processingStatus.value = 'Descomprimiendo imágenes del ZIP...';
+        processingStatus.value = t('upload.extractingZip');
         // Archivo ZIP con imágenes
         const pages = await handleZipFile(file);
         if (pages.length === 0) {
-          throw new Error('No se encontraron imágenes en el archivo ZIP.');
+          throw new Error(t('upload.error.noImagesZip'));
         }
         if (pages.length === 1) {
           emit('update:imageData', pages[0]);
@@ -216,14 +218,14 @@ const handleFileUpload = async (event: Event) => {
       }
 
       if (file.type.startsWith('image/')) {
-        processingStatus.value = 'Procesando imagen...';
+        processingStatus.value = t('upload.processingImage');
         // Imagen individual
         const imageData = await buildImageDataUrl(file);
         emit('update:imageData', imageData);
         return;
       }
 
-      throw new Error('Formato no compatible. Usa JPG, PNG, PDF o ZIP.');
+      throw new Error(t('upload.error.format'));
     }
 
     // Caso: múltiples archivos de imagen
@@ -232,21 +234,21 @@ const handleFileUpload = async (event: Event) => {
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
     if (sortedFiles.length === 0) {
-      throw new Error('No se seleccionaron archivos de imagen válidos.');
+      throw new Error(t('upload.error.noImagesSelected'));
     }
 
     const limitedFiles = sortedFiles.slice(0, MAX_PAGES);
 
     // Calcular hash combinado para múltiples imágenes
     try {
-      processingStatus.value = 'Calculando firma de los archivos...';
+      processingStatus.value = t('upload.hashing');
       const hash = await calculateMultipleFilesHash(limitedFiles);
       emit('fileHashed', { hash, type: 'zip' }); // Tratamos la colección como un 'zip' virtual para el caché
     } catch (hashError) {
       console.error('[HASH] Failed to calculate hash for multiple files:', hashError);
     }
 
-    processingStatus.value = 'Procesando imágenes...';
+    processingStatus.value = t('upload.processingImages');
     const pages: string[] = [];
     for (const file of limitedFiles) {
       const dataUrl = await buildImageDataUrl(file);

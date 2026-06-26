@@ -3,6 +3,7 @@ import { validateContract, type TranslationContract, type ProcessPageResponse, t
 export interface ProcessImageRequest {
   imageBase64: string;
   contexto?: string;
+  targetLanguage?: string;
 }
 
 export interface ProcessImageResponse {
@@ -64,7 +65,8 @@ async function fetchWithRetry(
  */
 export async function processPage(
   imageBase64: string,
-  contexto?: string
+  contexto?: string,
+  targetLanguage?: string
 ): Promise<ProcessPageResponse> {
   const controller = new AbortController();
   // 120 second timeout for HF Space cold start
@@ -81,6 +83,7 @@ export async function processPage(
         body: JSON.stringify({
           imageBase64,
           contexto: contexto || undefined,
+          targetLanguage,
         } as ProcessImageRequest),
         signal: controller.signal,
       }
@@ -185,7 +188,8 @@ export async function detectPage(
 export async function translatePageWithBoxes(
   croppedBubbles: CroppedBubble[],
   boxes: VisionBox[],
-  contexto?: string
+  contexto?: string,
+  targetLanguage?: string
 ): Promise<ProcessPageResponse> {
   const controller = new AbortController();
   // 120 second timeout for GPT-4o
@@ -203,6 +207,7 @@ export async function translatePageWithBoxes(
           croppedBubbles,
           boxes,
           contexto: contexto || undefined,
+          targetLanguage,
         }),
         signal: controller.signal,
       }
@@ -256,18 +261,19 @@ export interface CacheSaveRequest {
     translations: TranslationContract[];
     contexto: string;
   }>;
+  targetLanguage?: string;
 }
 
 /**
  * Consulta en el backend si existe caché para el hash del archivo provisto.
  */
-export async function checkCache(fileHash: string): Promise<CacheCheckResponse> {
+export async function checkCache(fileHash: string, targetLanguage?: string): Promise<CacheCheckResponse> {
   const response = await fetch('/api/cache/check', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ fileHash }),
+    body: JSON.stringify({ fileHash, targetLanguage }),
   });
 
   if (!response.ok) {

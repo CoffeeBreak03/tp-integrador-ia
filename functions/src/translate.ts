@@ -3,6 +3,7 @@ import { getAzureClient } from './lib/azure-client';
 
 interface TranslateRequest {
   text: string;
+  targetLanguage?: string;
 }
 
 export const translateText = async (req: Request, res: Response): Promise<void> => {
@@ -14,7 +15,7 @@ export const translateText = async (req: Request, res: Response): Promise<void> 
     }
 
     const azureClient = getAzureClient();
-    const result = await azureClient.callTranslateModel(body.text);
+    const result = await azureClient.callTranslateModel(body.text, body.targetLanguage);
     res.status(200).json({ translated: result });
   } catch (error) {
     console.error('Translate function error:', error);

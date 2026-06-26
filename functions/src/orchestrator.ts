@@ -43,7 +43,8 @@ export class PipelineOrchestrator {
   async translatePageOnly(
     croppedBubbles: Array<{ id: number; base64: string }>,
     boxes: VisionOutput['boxes'],
-    contexto?: string
+    contexto?: string,
+    targetLanguage?: string
   ): Promise<PageProcessResult> {
     console.log('[ORCHESTRATOR] Starting translatePageOnly for', boxes.length, 'boxes');
     if (boxes.length === 0 || croppedBubbles.length === 0) {
@@ -52,7 +53,7 @@ export class PipelineOrchestrator {
 
     // OCR y Traducción con Azure GPT-4o (con contexto)
     console.log('[ORCHESTRATOR] Step 4: Calling GPT-4o for OCR and translation...');
-    const translatedRaw = await this.azureClient.callOcrAndTranslation(croppedBubbles, contexto);
+    const translatedRaw = await this.azureClient.callOcrAndTranslation(croppedBubbles, contexto, targetLanguage);
     console.log('[ORCHESTRATOR] OCR/Translate raw response length:', translatedRaw.length, 'bytes');
 
     if (!translatedRaw) {
@@ -80,7 +81,7 @@ export class PipelineOrchestrator {
     return { contexto: updatedContexto, translations: finalTranslations };
   }
 
-  async processMangaImage(imageBase64: string, contexto?: string): Promise<PageProcessResult> {
+  async processMangaImage(imageBase64: string, contexto?: string, targetLanguage?: string): Promise<PageProcessResult> {
     const startTime = Date.now();
     console.log('[ORCHESTRATOR] Starting processMangaImage, input size:', imageBase64.length, 'bytes');
     if (contexto) {
@@ -92,7 +93,7 @@ export class PipelineOrchestrator {
       if (visionOutput.boxes.length === 0) {
         return { contexto: contexto || '', translations: [] };
       }
-      const result = await this.translatePageOnly(visionOutput.croppedBubbles || [], visionOutput.boxes, contexto);
+      const result = await this.translatePageOnly(visionOutput.croppedBubbles || [], visionOutput.boxes, contexto, targetLanguage);
       const totalTime = Date.now() - startTime;
       console.log('[ORCHESTRATOR] Complete in', totalTime, 'ms');
       return result;
@@ -334,7 +335,7 @@ export class PipelineOrchestrator {
           translations: traducciones.map((t: any) => ({
             id: Number(t.id),
             texto_japones: String(t.texto_japones ?? ''),
-            traduccion_espanol: String(t.traduccion_espanol ?? ''),
+            traduccion_espanol: String(t.traduccion_espanol ?? t.traduccion_ingles ?? t.texto_traducido ?? t.translation ?? ''),
           })),
         };
       }
@@ -346,7 +347,7 @@ export class PipelineOrchestrator {
           translations: parsed.map((t: any) => ({
             id: Number(t.id),
             texto_japones: String(t.texto_japones ?? ''),
-            traduccion_espanol: String(t.traduccion_espanol ?? ''),
+            traduccion_espanol: String(t.traduccion_espanol ?? t.traduccion_ingles ?? t.texto_traducido ?? t.translation ?? ''),
           })),
         };
       }

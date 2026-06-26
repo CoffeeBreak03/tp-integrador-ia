@@ -32,6 +32,7 @@ describe('Pipeline orchestrator', () => {
         expect(mockAzure.detectTextBubbles).toHaveBeenCalledWith('base64...');
         expect(mockAzure.callOcrAndTranslation).toHaveBeenCalledWith(
             [{ id: 1, base64: 'cropped_base64_1' }],
+            undefined,
             undefined
         );
         expect(result).toEqual({
@@ -68,7 +69,8 @@ describe('Pipeline orchestrator', () => {
 
         expect(mockAzure.callOcrAndTranslation).toHaveBeenCalledWith(
             [{ id: 1, base64: 'cropped_base64_1' }],
-            previousContext
+            previousContext,
+            undefined
         );
         expect(result.contexto).toBe('Updated context with new info.');
         expect(result.translations).toHaveLength(1);
@@ -230,12 +232,42 @@ describe('Pipeline orchestrator', () => {
 
         expect(mockAzure.callOcrAndTranslation).toHaveBeenCalledWith(
             croppedBubbles,
-            'Old context'
+            'Old context',
+            undefined
         );
         expect(result.contexto).toBe('New context');
         // Overlap cleaner should remove ID 1 and keep ID 2
         expect(result.translations).toHaveLength(1);
         expect(result.translations[0].id).toBe(2);
         expect(result.translations[0].texto_original).toBe('こんにちは、世界');
+    });
+
+    it('passes targetLanguage to callOcrAndTranslation and parses translation keys dynamically', async () => {
+        const mockAzure = {
+            callOcrAndTranslation: jest.fn().mockResolvedValue(
+                JSON.stringify({
+                    contexto: 'Context',
+                    traducciones: [
+                        { id: 1, texto_japones: 'こんにちは', traduccion_ingles: 'Hello' }
+                    ]
+                })
+            ),
+        } as any;
+
+        const orchestrator = new PipelineOrchestrator(mockAzure);
+        const result = await orchestrator.translatePageOnly(
+            [{ id: 1, base64: 'cropped_1' }],
+            [{ id: 1, y_min: 100, x_min: 100, y_max: 200, x_max: 200 }],
+            undefined,
+            'en'
+        );
+
+        expect(mockAzure.callOcrAndTranslation).toHaveBeenCalledWith(
+            [{ id: 1, base64: 'cropped_1' }],
+            undefined,
+            'en'
+        );
+        expect(result.translations).toHaveLength(1);
+        expect(result.translations[0].texto_traducido).toBe('Hello');
     });
 });

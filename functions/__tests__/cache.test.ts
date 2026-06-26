@@ -9,11 +9,16 @@ describe('CacheClient Local Fallback', () => {
 
   // Limpiar antes y después de cada test
   const cleanCache = () => {
-    const p = path.join(process.cwd(), 'cache', `${testHash}.json`);
-    if (fs.existsSync(p)) {
-      try {
-        fs.unlinkSync(p);
-      } catch (err) {}
+    const paths = [
+      path.join(process.cwd(), 'cache', `${testHash}.json`),
+      path.join(process.cwd(), 'cache', `${testHash}_en.json`)
+    ];
+    for (const p of paths) {
+      if (fs.existsSync(p)) {
+        try {
+          fs.unlinkSync(p);
+        } catch (err) {}
+      }
     }
   };
 
@@ -58,6 +63,40 @@ describe('CacheClient Local Fallback', () => {
     expect(result?.fileType).toBe('pdf');
     expect(result?.pages.length).toBe(1);
     expect(result?.pages[0].translations[0].texto_traducido).toBe('Hola');
+  });
+
+  it('saves and loads translations in separate files depending on target language', async () => {
+    const sampleData: CachedChapter = {
+      fileHash: testHash,
+      fileType: 'pdf',
+      pages: [
+        {
+          pageIndex: 0,
+          contexto: 'Context',
+          translations: [
+            {
+              id: 1,
+              box: [100, 100, 200, 200],
+              texto_original: 'こんにちは',
+              texto_traducido: 'Hello'
+            }
+          ]
+        }
+      ],
+      targetLanguage: 'en'
+    };
+
+    await cacheClient.saveCache(sampleData, 'en');
+
+    // Debe fallar al consultar sin idioma (o con español) ya que se guardó en inglés
+    const cacheMiss = await cacheClient.checkCache(testHash);
+    expect(cacheMiss).toBeNull();
+
+    // Debe acertar al consultar en inglés
+    const cacheHit = await cacheClient.checkCache(testHash, 'en');
+    expect(cacheHit).not.toBeNull();
+    expect(cacheHit?.targetLanguage).toBe('en');
+    expect(cacheHit?.pages[0].translations[0].texto_traducido).toBe('Hello');
   });
 
   it('refuses to save data with an invalid hash', async () => {

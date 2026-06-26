@@ -14,7 +14,7 @@
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           <div class="tooltip bottom-full left-1/2 mb-2 -translate-x-1/2 opacity-0 group-hover:opacity-100 hidden md:block">
-            Volver al panel
+            {{ t('reader.backToPanel') }}
           </div>
         </button>
         <span class="font-semibold text-lg drop-shadow-md">{{ fileName || 'Visor de Manga' }}</span>
@@ -30,7 +30,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <span class="text-sm font-medium tracking-wide">
-          Pág. {{ displayPageText }} / {{ chapterPages.length }}
+          {{ t('reader.page') }} {{ displayPageText }} / {{ chapterPages.length }}
         </span>
         <div v-if="isProcessingChapter" class="ml-2 h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
         <button
@@ -53,7 +53,7 @@
           <div v-else class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
           
           <div class="tooltip right-full top-1/2 mr-2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hidden md:block whitespace-nowrap">
-            {{ isExporting ? 'Exportando...' : (!isChapterProcessingComplete ? 'Procesando capítulo...' : 'Exportar capítulo (ZIP)') }}
+            {{ isExporting ? t('reader.exporting') : (!isChapterProcessingComplete ? t('reader.processingChapter') : t('reader.exportReady')) }}
           </div>
         </button>
       </div>
@@ -65,7 +65,7 @@
       :class="showCacheToast ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'"
     >
       <div class="rounded-full bg-blue-600 px-6 py-3 font-semibold text-white shadow-xl shadow-blue-900/20 ring-1 ring-blue-500">
-        ✨ Recuperadas {{ cacheHitCount }} página{{ cacheHitCount !== 1 ? 's' : '' }} de la caché
+        {{ t('reader.cacheHit', { count: cacheHitCount }) }}
       </div>
     </div>
 
@@ -76,7 +76,7 @@
     >
       <div class="rounded-full bg-slate-800 px-6 py-3 font-semibold text-white shadow-xl shadow-slate-900/50 ring-1 ring-slate-700 flex items-center gap-3">
         <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
-        <span>Exportando ZIP... {{ exportProgress.current }} de {{ exportProgress.total }} páginas</span>
+        <span>{{ t('reader.exportingZip', { current: exportProgress.current, total: exportProgress.total }) }}</span>
       </div>
     </div>
 
@@ -195,7 +195,7 @@
         <svg v-if="showOverlay" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
         <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
         <div class="tooltip right-full top-1/2 mr-2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hidden md:block">
-          {{ showOverlay ? 'Ocultar Traducciones' : 'Mostrar Traducciones' }}
+          {{ showOverlay ? t('reader.hideTranslations') : t('reader.showTranslations') }}
         </div>
       </button>
 
@@ -205,7 +205,7 @@
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <div class="tooltip right-full top-1/2 mr-2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hidden md:block">
-          Lista de Traducciones
+          {{ t('reader.translationsList') }}
         </div>
       </button>
 
@@ -215,7 +215,7 @@
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <div class="tooltip right-full top-1/2 mr-2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hidden md:block">
-          Configuración
+          {{ t('reader.settings') }}
         </div>
       </button>
     </div>
@@ -250,23 +250,23 @@
       </div>
 
       <div class="mb-4 shrink-0 px-6 pt-6 md:pt-8 flex items-center justify-between">
-        <h2 class="text-xl font-bold">Configuración</h2>
+        <h2 class="text-xl font-bold">{{ t('reader.settings') }}</h2>
       </div>
 
       <div class="flex-1 overflow-y-auto px-6 pb-6 space-y-6 scrollbar-thin">
         <!-- Layout Mode -->
         <div>
-          <h3 class="mb-3 text-sm font-medium text-slate-400">Layout</h3>
+          <h3 class="mb-3 text-sm font-medium text-slate-400">{{ t('settings.layout') }}</h3>
           <div class="flex gap-2 rounded-xl bg-slate-800 p-1">
-            <button @click="layoutMode = 'single'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="layoutMode === 'single' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">Simple</button>
-            <button @click="layoutMode = 'double'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="layoutMode === 'double' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">Doble</button>
-            <button @click="layoutMode = 'cascade'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="layoutMode === 'cascade' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">Cascada</button>
+            <button @click="layoutMode = 'single'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="layoutMode === 'single' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">{{ t('settings.single') }}</button>
+            <button @click="layoutMode = 'double'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="layoutMode === 'double' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">{{ t('settings.double') }}</button>
+            <button @click="layoutMode = 'cascade'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="layoutMode === 'cascade' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">{{ t('settings.cascade') }}</button>
           </div>
         </div>
 
         <!-- Reading Direction (only visible if not cascade) -->
         <div v-if="layoutMode !== 'cascade'">
-          <h3 class="mb-3 text-sm font-medium text-slate-400">Dirección de lectura</h3>
+          <h3 class="mb-3 text-sm font-medium text-slate-400">{{ t('settings.readingDirection') }}</h3>
           <div class="flex gap-2 rounded-xl bg-slate-800 p-1">
             <button @click="readingDirection = 'ltr'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="readingDirection === 'ltr' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">LTR (→)</button>
             <button @click="readingDirection = 'rtl'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="readingDirection === 'rtl' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">RTL (←)</button>
@@ -275,18 +275,18 @@
 
         <!-- Fit Presets -->
         <div>
-          <h3 class="mb-3 text-sm font-medium text-slate-400">Ajuste de pantalla</h3>
+          <h3 class="mb-3 text-sm font-medium text-slate-400">{{ t('settings.fitScreen') }}</h3>
           <div class="flex gap-2 rounded-xl bg-slate-800 p-1">
-            <button @click="fitMode = 'height'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="fitMode === 'height' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">Alto ↕</button>
-            <button @click="fitMode = 'width'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="fitMode === 'width' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">Ancho ↔</button>
+            <button @click="fitMode = 'height'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="fitMode === 'height' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">{{ t('settings.fitHeight') }}</button>
+            <button @click="fitMode = 'width'" class="flex-1 rounded-lg py-2 text-center text-sm transition-colors" :class="fitMode === 'width' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'">{{ t('settings.fitWidth') }}</button>
           </div>
         </div>
 
         <!-- Zoom Slider -->
         <div>
           <div class="mb-3 flex items-center justify-between text-sm font-medium text-slate-400">
-            <span>Zoom</span>
-            <span>{{ fitMode === 'width' ? 'Ajustado' : zoomPercent + '%' }}</span>
+            <span>{{ t('settings.zoom') }}</span>
+            <span>{{ fitMode === 'width' ? t('settings.zoomFit') : zoomPercent + '%' }}</span>
           </div>
           <input
             type="range"
@@ -303,7 +303,7 @@
         <div v-if="layoutMode === 'double'">
           <label class="flex items-center gap-3 text-sm font-medium text-slate-300">
             <input type="checkbox" v-model="doublePageCover" class="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-500 accent-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900" />
-            Primera página es portada
+            {{ t('settings.coverPage') }}
           </label>
         </div>
 
@@ -311,11 +311,11 @@
         
         <!-- Overlay Appearance -->
         <div class="space-y-4">
-          <h3 class="text-sm font-medium text-slate-400">Estética de Overlays</h3>
+          <h3 class="text-sm font-medium text-slate-400">{{ t('settings.overlayAppearance') }}</h3>
           
           <!-- Font Family -->
           <div class="flex items-center justify-between">
-            <span class="text-sm font-medium text-slate-300">Fuente</span>
+            <span class="text-sm font-medium text-slate-300">{{ t('settings.font') }}</span>
             <div class="flex items-center gap-2">
               <select v-model="overlayFontFamily" class="rounded-lg bg-slate-800 p-1.5 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 border-none">
                 <option value="sans-serif">Sans-serif</option>
@@ -323,7 +323,7 @@
                 <option value="monospace">Monospace</option>
                 <option value="'Comic Sans MS', cursive, sans-serif">Comic</option>
               </select>
-              <button @click="overlayFontFamily = 'sans-serif'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+              <button @click="overlayFontFamily = 'sans-serif'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" :title="t('settings.reset')">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
               </button>
             </div>
@@ -332,8 +332,8 @@
           <!-- Font Size Scale -->
           <div>
             <div class="mb-2 flex items-center justify-between text-sm font-medium text-slate-300">
-              <span>Tamaño de texto: {{ overlayFontSizeScale.toFixed(1) }}x</span>
-              <button @click="overlayFontSizeScale = 1.0" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+              <span>{{ t('settings.fontSize', { scale: overlayFontSizeScale.toFixed(1) }) }}</span>
+              <button @click="overlayFontSizeScale = 1.0" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" :title="t('settings.reset')">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
               </button>
             </div>
@@ -344,10 +344,10 @@
 
           <!-- Text Color -->
           <div class="flex items-center justify-between">
-            <span class="text-sm font-medium text-slate-300">Color de texto</span>
+            <span class="text-sm font-medium text-slate-300">{{ t('settings.textColor') }}</span>
             <div class="flex items-center gap-2">
               <input type="color" :value="overlayTextColor === 'default' ? defaultTextColor : overlayTextColor" @input="updateTextColor" class="h-8 w-14 cursor-pointer rounded bg-slate-800 p-0 border-0" />
-              <button @click="overlayTextColor = 'default'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+              <button @click="overlayTextColor = 'default'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" :title="t('settings.reset')">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
               </button>
             </div>
@@ -355,10 +355,10 @@
 
           <!-- Background Color -->
           <div class="flex items-center justify-between">
-            <span class="text-sm font-medium text-slate-300">Color de fondo</span>
+            <span class="text-sm font-medium text-slate-300">{{ t('settings.bgColor') }}</span>
             <div class="flex items-center gap-2">
               <input type="color" :value="overlayBgColor === 'default' ? defaultBgColor : overlayBgColor" @input="updateBgColor" class="h-8 w-14 cursor-pointer rounded bg-slate-800 p-0 border-0" />
-              <button @click="overlayBgColor = 'default'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+              <button @click="overlayBgColor = 'default'" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" :title="t('settings.reset')">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
               </button>
             </div>
@@ -367,8 +367,8 @@
           <!-- Background Opacity -->
           <div>
             <div class="mb-2 flex items-center justify-between text-sm font-medium text-slate-300">
-              <span>Opacidad de fondo: {{ Math.round(overlayBgOpacity * 100) }}%</span>
-              <button @click="overlayBgOpacity = 0.95" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Restablecer">
+              <span>{{ t('settings.bgOpacity', { opacity: Math.round(overlayBgOpacity * 100) }) }}</span>
+              <button @click="overlayBgOpacity = 0.95" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" :title="t('settings.reset')">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
               </button>
             </div>
@@ -431,20 +431,20 @@
             </svg>
           </div>
         </div>
-        <h3 class="mb-2 text-center text-xl font-bold text-white">¡Descarga Completada!</h3>
+        <h3 class="mb-2 text-center text-xl font-bold text-white">{{ t('export.success.title') }}</h3>
         <p class="mb-4 text-center text-sm text-slate-300">
-          Tu capítulo ha sido exportado exitosamente. Para leerlo:
+          {{ t('export.success.description') }}
         </p>
         <ol class="mb-6 list-decimal pl-5 text-sm text-slate-300 space-y-2">
-          <li>Extrae/descomprime el archivo <strong>.zip</strong> que acabas de descargar.</li>
-          <li>Abre la carpeta extraída.</li>
-          <li>Haz doble clic en el archivo <strong>index.html</strong> para abrirlo en tu navegador.</li>
+          <li>{{ t('export.success.step1') }}</li>
+          <li>{{ t('export.success.step2') }}</li>
+          <li>{{ t('export.success.step3') }}</li>
         </ol>
         <button 
           @click="showExportSuccessModal = false" 
           class="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition-colors hover:bg-blue-500"
         >
-          ¡Entendido!
+          {{ t('export.success.cta') }}
         </button>
       </div>
     </div>
@@ -457,6 +457,8 @@ import { ref, computed, watch, onMounted, onUnmounted, inject, nextTick } from '
 import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
 import { exportChapterToZip, downloadBlob } from '@/lib/exporter';
+
+const { t } = inject<any>('i18n');
 
 const props = defineProps<{
   fileName?: string;
