@@ -2,7 +2,7 @@
   <div :class="['relative overflow-hidden', flat ? 'h-full w-full flex items-center justify-center' : 'w-full rounded-3xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/80']">
     <div :class="['relative', flat ? 'h-full w-full flex items-center justify-center' : 'w-full min-h-[320px] bg-slate-100 dark:bg-slate-900']">
       <div v-if="!imageData" class="flex h-full min-h-[320px] items-center justify-center p-6 text-center text-sm text-slate-600 dark:text-slate-400">
-        Carga una imagen o PDF para ver las capas de traducción superpuestas.
+        {{ t('overlay.empty') }}
       </div>
 
       <div v-else class="flex justify-center" :class="[flat && fitMode === 'height' ? 'h-full' : 'w-full']">
@@ -26,7 +26,7 @@
             class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-sm"
           >
             <div class="h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent"></div>
-            <p class="mt-3 text-sm font-medium text-white">Procesando página...</p>
+            <p class="mt-3 text-sm font-medium text-white">{{ t('overlay.processingPage') }}</p>
           </div>
 
           <!-- Icono de error para reintentar -->
@@ -41,7 +41,7 @@
                 <path d="M3 3v5h5"/>
               </svg>
             </div>
-            <p class="text-sm font-medium text-white drop-shadow-md">Error al procesar. Click para reintentar</p>
+            <p class="text-sm font-medium text-white drop-shadow-md">{{ t('overlay.errorRetry') }}</p>
           </div>
 
           <!-- Overlay para container queries: tiene el mismo tamaño exacto que la imagen gracias a inset-0 -->
@@ -85,8 +85,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue';
 import type { TranslationContract } from '@/lib/contract';
+
+const { t } = inject<any>('i18n');
 
 const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < 768);
 

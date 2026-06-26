@@ -17,7 +17,7 @@
             {{ t('reader.backToPanel') }}
           </div>
         </button>
-        <span class="font-semibold text-lg drop-shadow-md">{{ fileName || 'Visor de Manga' }}</span>
+        <span class="font-semibold text-lg drop-shadow-md">{{ fileName || t('reader.title') }}</span>
       </div>
 
       <div class="flex items-center gap-4 drop-shadow-md">
@@ -458,7 +458,7 @@ import OverlayRenderer from '@/components/OverlayRenderer.vue';
 import TranslationPanel from '@/components/TranslationPanel.vue';
 import { exportChapterToZip, downloadBlob } from '@/lib/exporter';
 
-const { t } = inject<any>('i18n');
+const { t, lang } = inject<any>('i18n');
 
 const props = defineProps<{
   fileName?: string;
@@ -528,13 +528,14 @@ const handleExport = async () => {
         fontSizeScale: overlayFontSizeScale.value,
         textColor,
         bgColor,
-        bgOpacity: overlayBgOpacity.value
+        bgOpacity: overlayBgOpacity.value,
+        lang: lang.value
       },
       (current, total) => {
         exportProgress.value = { current, total };
       }
     );
-    downloadBlob(blob, 'capitulo_traducido.zip');
+    downloadBlob(blob, t('reader.exportFilename'));
     showExportSuccessModal.value = true;
   } catch (err) {
     console.error('Error al exportar capítulo:', err);
@@ -703,13 +704,13 @@ const activePageGroups = computed(() => {
       .filter(idx => idx !== -1)
       .map(idx => ({
         pageIndex: idx,
-        title: `Página ${idx + 1}`,
+        title: t('reader.pageTitle', { number: idx + 1 }),
         translations: pageCache.value.get(idx)?.translations || []
       }));
   }
   return [{
     pageIndex: currentPageIndex.value,
-    title: `Página ${currentPageIndex.value + 1}`,
+    title: t('reader.pageTitle', { number: currentPageIndex.value + 1 }),
     translations: pageCache.value.get(currentPageIndex.value)?.translations || []
   }];
 });

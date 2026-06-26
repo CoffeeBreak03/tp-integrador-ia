@@ -63,7 +63,13 @@ export const translations = {
     'export.success.step3': 'Haz doble clic en el archivo index.html para abrirlo en tu navegador.',
     'export.success.cta': '¡Entendido!',
     'langSelector.es': 'Español',
-    'langSelector.en': 'English'
+    'langSelector.en': 'English',
+    'overlay.empty': 'Carga una imagen o PDF para ver las capas de traducción superpuestas.',
+    'overlay.processingPage': 'Procesando página...',
+    'overlay.errorRetry': 'Error al procesar. Click para reintentar',
+    'reader.title': 'Visor de Manga',
+    'reader.pageTitle': 'Página {number}',
+    'reader.exportFilename': 'capitulo_traducido.zip'
   },
   en: {
     'app.description': 'Translate your manga pages instantly. Upload an image, PDF or ZIP to digitalize and translate its content automatically.',
@@ -129,6 +135,12 @@ export const translations = {
     'export.success.step3': 'Double-click the index.html file to open it in your browser.',
     'export.success.cta': 'Got it!',
     'langSelector.es': 'Español',
-    'langSelector.en': 'English'
+    'langSelector.en': 'English',
+    'overlay.empty': 'Upload an image or PDF to view overlaid translation layers.',
+    'overlay.processingPage': 'Processing page...',
+    'overlay.errorRetry': 'Error processing page. Click to retry',
+    'reader.title': 'Manga Viewer',
+    'reader.pageTitle': 'Page {number}',
+    'reader.exportFilename': 'translated_chapter.zip'
   }
 };

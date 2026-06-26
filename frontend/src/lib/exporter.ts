@@ -8,6 +8,7 @@ export interface ExportOptions {
   textColor: string;
   bgColor: string;
   bgOpacity: number;
+  lang?: 'es' | 'en';
 }
 
 export async function exportChapterToZip(
@@ -28,8 +29,12 @@ export async function exportChapterToZip(
     }>,
   };
 
-  const pagesFolder = zip.folder('paginas');
-  if (!pagesFolder) throw new Error('Could not create paginas folder');
+  const isEn = options.lang === 'en';
+  const folderName = isEn ? 'pages' : 'paginas';
+  const filePrefix = isEn ? 'page' : 'pagina';
+
+  const pagesFolder = zip.folder(folderName);
+  if (!pagesFolder) throw new Error(`Could not create ${folderName} folder`);
 
   for (let i = 0; i < totalPages; i++) {
     const pageDataUrl = pages[i];
@@ -45,13 +50,13 @@ export async function exportChapterToZip(
     const blob = await dataUrlToBlob(pageDataUrl);
     
     const paddedIndex = String(i + 1).padStart(3, '0');
-    const imageFilename = `pagina_${paddedIndex}.jpg`;
+    const imageFilename = `${filePrefix}_${paddedIndex}.jpg`;
     
     pagesFolder.file(imageFilename, blob);
     
     exportData.pages.push({
       index: i,
-      imagePath: `paginas/${imageFilename}`,
+      imagePath: `${folderName}/${imageFilename}`,
       translations: pageTranslations
     });
 
@@ -102,12 +107,39 @@ export function generateViewerHTML(
   
   const serializedData = JSON.stringify(pagesData).replace(/</g, '\\u003c');
 
+  const offlineTranslations = {
+    es: {
+      title: 'Visor de Manga Traducido',
+      prev: 'Anterior',
+      next: 'Siguiente',
+      page: 'Pág.',
+      zoomOut: 'Alejar',
+      zoomFit: 'Ajustar',
+      zoomIn: 'Acercar',
+      overlays: '👁 Overlays',
+      altText: 'Página del manga'
+    },
+    en: {
+      title: 'Translated Manga Viewer',
+      prev: 'Previous',
+      next: 'Next',
+      page: 'Pg.',
+      zoomOut: 'Zoom Out',
+      zoomFit: 'Fit',
+      zoomIn: 'Zoom In',
+      overlays: '👁 Overlays',
+      altText: 'Manga page'
+    }
+  };
+  const lang = options.lang === 'en' ? 'en' : 'es';
+  const t = offlineTranslations[lang];
+
   return `<!DOCTYPE html>
-<html lang="es" class="dark">
+<html lang="${lang}" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Visor de Manga Traducido</title>
+  <title>${t.title}</title>
   <style>
     :root {
       --bg-color: #020617;
@@ -237,20 +269,20 @@ export function generateViewerHTML(
 </head>
 <body>
   <div id="top-bar">
-    <button id="btn-prev" class="btn">Anterior</button>
-    <span id="page-indicator" style="font-weight: 600; min-width: 120px; text-align: center;">Pág. - / -</span>
-    <button id="btn-next" class="btn">Siguiente</button>
+    <button id="btn-prev" class="btn">${t.prev}</button>
+    <span id="page-indicator" style="font-weight: 600; min-width: 120px; text-align: center;">${t.page} - / -</span>
+    <button id="btn-next" class="btn">${t.next}</button>
     <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.2); margin: 0 0.5rem;"></div>
-    <button id="btn-zoom-out" class="btn" title="Alejar">🔍-</button>
-    <button id="btn-zoom-reset" class="btn" title="Ajustar">[ ]</button>
-    <button id="btn-zoom-in" class="btn" title="Acercar">🔍+</button>
+    <button id="btn-zoom-out" class="btn" title="${t.zoomOut}">🔍-</button>
+    <button id="btn-zoom-reset" class="btn" title="${t.zoomFit}">[ ]</button>
+    <button id="btn-zoom-in" class="btn" title="${t.zoomIn}">🔍+</button>
     <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.2); margin: 0 0.5rem;"></div>
-    <button id="btn-toggle" class="btn">👁 Overlays</button>
+    <button id="btn-toggle" class="btn">${t.overlays}</button>
   </div>
 
   <div id="main-container">
     <div class="page-wrapper">
-      <img id="manga-image" alt="Página del manga">
+      <img id="manga-image" alt="${t.altText}">
       <div id="overlays" class="overlay-container"></div>
     </div>
   </div>
@@ -285,7 +317,7 @@ export function generateViewerHTML(
     function updateNav() {
       btnPrev.disabled = currentPageIndex === 0;
       btnNext.disabled = currentPageIndex === CHAPTER_DATA.length - 1;
-      pageIndicator.textContent = 'Pág. ' + (currentPageIndex + 1) + ' / ' + CHAPTER_DATA.length;
+      pageIndicator.textContent = '${t.page} ' + (currentPageIndex + 1) + ' / ' + CHAPTER_DATA.length;
     }
 
     function loadPage(index) {
