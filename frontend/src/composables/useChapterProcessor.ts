@@ -1,6 +1,7 @@
-import { ref, computed, nextTick, onUnmounted } from 'vue';
+import { ref, computed, nextTick, onUnmounted, watch } from 'vue';
 import { type TranslationContract, type VisionBox } from '@/lib/contract';
 import { processPage, detectPage, translatePageWithBoxes, checkCache, saveCache } from '@/lib/api';
+import { useI18n } from '@/composables/useI18n';
 
 export interface CachedPage {
   translations: TranslationContract[];
@@ -22,6 +23,7 @@ export function useChapterProcessor() {
   const loadingMessage = ref('Procesando imagen...');
   let loadingTimer: number | null = null;
   let loadingStartTime: number | null = null;
+  const { lang } = useI18n();
 
   // Estado unificado (sirve para capítulo e imagen individual)
   const chapterPages = ref<string[]>([]);
@@ -29,6 +31,7 @@ export function useChapterProcessor() {
   const isProcessingChapter = ref(false);
   const pageCache = ref<Map<number, CachedPage>>(new Map());
   let chapterProcessingAborted = false;
+  let currentProcessId = 0;
   const isDetectingChapter = ref(false);
   const isTranslatingChapter = ref(false);
 
@@ -90,6 +93,7 @@ export function useChapterProcessor() {
   // Manejadores principales
   const handleSingleImage = async (imageDataUrl: string) => {
     resetChapter();
+    const processId = currentProcessId;
     if (!imageDataUrl) return;
 
     chapterPages.value = [imageDataUrl];
@@ -116,7 +120,9 @@ export function useChapterProcessor() {
     if (fileHash && fileType === 'image') {
       try {
         console.log('[CACHE] Checking cache for image:', fileHash);
-        const cacheResult = await checkCache(fileHash);
+        const cacheResult = await checkCache(fileHash, lang.value);
+        if (processId !== currentProcessId) return;
+
         if (cacheResult.cached && cacheResult.data && cacheResult.data.pages.length > 0) {
           console.log('[CACHE] Cache HIT for image:', fileHash);
           pageCache.value.set(0, {
@@ -142,7 +148,9 @@ export function useChapterProcessor() {
     loadingMessage.value = 'Procesando imagen...';
 
     try {
-      const result = await processPage(imageDataUrl);
+      const result = await processPage(imageDataUrl, undefined, lang.value);
+      if (processId !== currentProcessId) return;
+
       pageCache.value.set(0, {
         ...cachedPage,
         translations: result.translations || [],
@@ -160,7 +168,8 @@ export function useChapterProcessor() {
                 translations: cachedPage.translations,
                 contexto: ''
               }
-            ]
+            ],
+            targetLanguage: lang.value
           });
           console.log('[CACHE] Successfully saved translation results for image:', fileHash);
         } catch (saveErr) {
@@ -184,6 +193,7 @@ export function useChapterProcessor() {
   };
 
   const resetChapter = () => {
+    currentProcessId++;
     chapterProcessingAborted = true;
     chapterPages.value = [];
     currentPageIndex.value = 0;
@@ -197,6 +207,7 @@ export function useChapterProcessor() {
 
   const handleChapterLoaded = async (pages: string[]) => {
     resetChapter();
+    const processId = currentProcessId;
     chapterProcessingAborted = false;
     chapterPages.value = pages;
     currentPageIndex.value = 0;
@@ -221,7 +232,9 @@ export function useChapterProcessor() {
     if (fileHash && (fileType === 'pdf' || fileType === 'zip')) {
       try {
         console.log('[CACHE] Checking cache for chapter:', fileHash);
-        const cacheResult = await checkCache(fileHash);
+        const cacheResult = await checkCache(fileHash, lang.value);
+        if (processId !== currentProcessId) return;
+
         if (cacheResult.cached && cacheResult.data && cacheResult.data.pages.length > 0) {
           console.log('[CACHE] Cache HIT for chapter:', fileHash);
           let hits = 0;
@@ -286,6 +299,7 @@ export function useChapterProcessor() {
             fileHash,
             fileType,
             pages: successfulPages,
+            targetLanguage: lang.value
           });
           console.log('[CACHE] Progressively saved translation results for chapter:', fileHash);
         } catch (saveErr) {
@@ -297,12 +311,13 @@ export function useChapterProcessor() {
 
   const runDetectionChain = async () => {
     if (isDetectingChapter.value) return;
+    const processId = currentProcessId;
     isDetectingChapter.value = true;
     updateProcessingStatus();
 
     try {
       for (let i = 0; i < chapterPages.value.length; i++) {
-        if (chapterProcessingAborted) break;
+        if (chapterProcessingAborted || processId !== currentProcessId) break;
 
         const cached = pageCache.value.get(i);
         if (!cached) continue;
@@ -314,7 +329,7 @@ export function useChapterProcessor() {
         try {
           console.log('[PIPELINE] Detecting page', i + 1);
           const result = await detectPage(chapterPages.value[i]);
-          if (chapterProcessingAborted) break;
+          if (chapterProcessingAborted || processId !== currentProcessId) break;
 
           pageCache.value.set(i, {
             ...cached,
@@ -353,12 +368,13 @@ export function useChapterProcessor() {
 
   const runTranslationChain = async () => {
     if (isTranslatingChapter.value) return;
+    const processId = currentProcessId;
     isTranslatingChapter.value = true;
     updateProcessingStatus();
 
     try {
       for (let i = 0; i < chapterPages.value.length; i++) {
-        if (chapterProcessingAborted) break;
+        if (chapterProcessingAborted || processId !== currentProcessId) break;
 
         const cached = pageCache.value.get(i);
         if (!cached) continue;
@@ -394,10 +410,11 @@ export function useChapterProcessor() {
           const result = await translatePageWithBoxes(
             cached.croppedBubbles || [],
             cached.boxes || [],
-            prevContext || undefined
+            prevContext || undefined,
+            lang.value
           );
 
-          if (chapterProcessingAborted) break;
+          if (chapterProcessingAborted || processId !== currentProcessId) break;
 
           pageCache.value.set(i, {
             ...cached,
@@ -500,6 +517,22 @@ export function useChapterProcessor() {
       errorMessage.value = null;
     }
   };
+
+  watch(lang, async (newLang) => {
+    if (chapterPages.value.length > 0) {
+      console.log(`[LANG] Language changed to ${newLang}, reloading chapter/image`);
+      const pagesBackup = [...chapterPages.value];
+      const isChapter = isChapterMode.value;
+      const currentIdx = currentPageIndex.value;
+      
+      if (isChapter) {
+        await handleChapterLoaded(pagesBackup);
+        goToPage(currentIdx + 1);
+      } else {
+        await handleSingleImage(pagesBackup[0]);
+      }
+    }
+  });
 
   onUnmounted(() => {
     stopLoadingTimer();

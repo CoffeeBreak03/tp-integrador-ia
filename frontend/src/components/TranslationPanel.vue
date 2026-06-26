@@ -2,8 +2,8 @@
   <aside :class="flat ? 'flex h-full flex-col' : 'rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/90'">
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Traducciones</h2>
-        <p class="text-sm text-slate-600 dark:text-slate-400">Busca y selecciona bloques de texto.</p>
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">{{ t('panel.translations') }}</h2>
+        <p class="text-sm text-slate-600 dark:text-slate-400">{{ t('panel.subtitle') }}</p>
       </div>
       <span class="rounded-full bg-blue-500 px-3 py-1 text-xs font-semibold text-white">{{ totalTranslations }}</span>
     </div>
@@ -12,7 +12,7 @@
       <input
         v-model="searchQuery"
         type="search"
-        placeholder="Buscar original o traducido"
+        :placeholder="t('panel.searchPlaceholder')"
         class="w-full rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
       />
     </div>
@@ -41,15 +41,17 @@
         </button>
       </div>
       <p v-if="totalTranslations === 0 || filteredGroups.every(g => g.translations.length === 0)" class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-        No se encontraron traducciones.
+        {{ t('panel.noTranslations') }}
       </p>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, inject } from 'vue';
 import type { TranslationContract } from '@/lib/contract';
+
+const { t } = inject<any>('i18n');
 
 const props = defineProps<{
   pageGroups: { pageIndex: number; title: string; translations: TranslationContract[] }[];

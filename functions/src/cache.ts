@@ -4,6 +4,7 @@ import { validateTranslationContract } from './lib/validate-contract';
 
 interface CacheCheckRequest {
   fileHash: string;
+  targetLanguage?: string;
 }
 
 interface CacheSaveRequest {
@@ -14,18 +15,19 @@ interface CacheSaveRequest {
     translations: any[];
     contexto: string;
   }>;
+  targetLanguage?: string;
 }
 
 export const checkCacheRoute = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { fileHash } = req.body as CacheCheckRequest;
+    const { fileHash, targetLanguage } = req.body as CacheCheckRequest;
     if (!fileHash || typeof fileHash !== 'string') {
       res.status(400).json({ error: 'Missing or invalid fileHash parameter' });
       return;
     }
 
     const cacheClient = getCacheClient();
-    const cachedData = await cacheClient.checkCache(fileHash);
+    const cachedData = await cacheClient.checkCache(fileHash, targetLanguage);
 
     if (cachedData) {
       res.status(200).json({
@@ -45,7 +47,7 @@ export const checkCacheRoute = async (req: Request, res: Response): Promise<void
 
 export const saveCacheRoute = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { fileHash, fileType, pages } = req.body as CacheSaveRequest;
+    const { fileHash, fileType, pages, targetLanguage } = req.body as CacheSaveRequest;
     if (!fileHash || typeof fileHash !== 'string') {
       res.status(400).json({ error: 'Missing or invalid fileHash' });
       return;
@@ -82,10 +84,11 @@ export const saveCacheRoute = async (req: Request, res: Response): Promise<void>
         pageIndex: p.pageIndex,
         translations: p.translations,
         contexto: p.contexto
-      }))
+      })),
+      targetLanguage
     };
 
-    await cacheClient.saveCache(cacheData);
+    await cacheClient.saveCache(cacheData, targetLanguage);
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('[CACHE] Route save error:', error);

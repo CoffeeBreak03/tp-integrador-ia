@@ -8,20 +8,30 @@
             <img src="/favicon.png" alt="Manga Translate Logo" class="h-10 w-10 object-contain sm:h-12 sm:w-12" />
             <h1 class="text-3xl font-bold sm:text-4xl">Manga Translate</h1>
           </div>
-          <button
-            id="dark-mode-toggle"
-            type="button"
-            @click="toggleDark"
-            :aria-label="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
-            :title="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
-            class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-lg shadow-sm transition-all duration-300 hover:border-blue-400 hover:bg-blue-50 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:hover:border-blue-400 dark:hover:bg-slate-700"
-          >
-            <span v-if="isDark" class="transition-transform duration-300">☀️</span>
-            <span v-else class="transition-transform duration-300">🌙</span>
-          </button>
+          <div class="flex items-center gap-3">
+            <select
+              v-model="lang"
+              @change="setLang(lang)"
+              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm outline-none transition-all hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
+            >
+              <option value="es">{{ t('langSelector.es') }}</option>
+              <option value="en">{{ t('langSelector.en') }}</option>
+            </select>
+            <button
+              id="dark-mode-toggle"
+              type="button"
+              @click="toggleDark"
+              :aria-label="isDark ? t('app.lightMode') : t('app.darkMode')"
+              :title="isDark ? t('app.lightMode') : t('app.darkMode')"
+              class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-lg shadow-sm transition-all duration-300 hover:border-blue-400 hover:bg-blue-50 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:hover:border-blue-400 dark:hover:bg-slate-700"
+            >
+              <span v-if="isDark" class="transition-transform duration-300">☀️</span>
+              <span v-else class="transition-transform duration-300">🌙</span>
+            </button>
+          </div>
         </div>
         <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-          Traduce tus páginas de manga al instante. Sube una imagen, PDF o ZIP para digitalizar y traducir su contenido automáticamente.
+          {{ t('app.description') }}
         </p>
       </header>
 
@@ -31,13 +41,13 @@
              
             <!-- Vista cuando hay un archivo cargado pero el visor está cerrado -->
             <div v-if="hasLoadedContent" class="flex flex-col items-center justify-center p-10 space-y-6">
-               <p class="text-lg font-medium text-slate-600 dark:text-slate-400">Tienes un archivo procesándose o listo para leer.</p>
+               <p class="text-lg font-medium text-slate-600 dark:text-slate-400">{{ t('home.loadedMessage') }}</p>
                <div class="flex flex-wrap justify-center gap-4">
                  <button @click="isReaderOpen = true" class="rounded-full bg-blue-600 px-6 py-3 font-semibold text-white shadow hover:bg-blue-500 transition-colors">
-                    Continuar leyendo
+                    {{ t('home.continueReading') }}
                  </button>
                  <button @click="onReset" class="rounded-full border border-slate-300 px-6 py-3 font-semibold hover:bg-slate-200 transition-colors dark:border-slate-700 dark:hover:bg-slate-800">
-                    Cargar otro archivo
+                    {{ t('home.loadAnother') }}
                  </button>
                </div>
             </div>
@@ -57,9 +67,9 @@
               <div class="flex items-center gap-2">
                 <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600"></div>
                 <div class="flex-1">
-                  <p class="font-semibold">Procesando capítulo...</p>
+                  <p class="font-semibold">{{ t('home.processingChapter') }}</p>
                   <p class="mt-1 text-xs opacity-75">
-                    Página {{ processedPagesCount }} de {{ chapterPages.length }} procesadas
+                    {{ t('home.pageOf', { current: processedPagesCount, total: chapterPages.length }) }}
                   </p>
                 </div>
               </div>
@@ -89,10 +99,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, provide } from 'vue';
+import { ref, computed, onMounted, provide } from 'vue';
 import ImageUploader from '@/components/ImageUploader.vue';
 import MangaReader from '@/components/MangaReader.vue';
 import { useChapterProcessor } from '@/composables/useChapterProcessor';
+import { useI18n } from '@/composables/useI18n';
+
+// --- i18n ---
+const i18n = useI18n();
+provide('i18n', i18n);
+const { t, lang, setLang } = i18n;
 
 // --- Dark mode ---
 const isDark = ref(false);
@@ -133,17 +149,22 @@ const {
 
 // --- App State ---
 const isReaderOpen = ref(false);
-const loadedFileName = ref<string>('');
 const imageUploader = ref<{ openExplorer: () => void } | null>(null);
 
+const loadedFileName = computed(() => {
+  if (!hasLoadedContent.value) return '';
+  if (isChapterMode.value) {
+    return t('home.chapterPages', { count: chapterPages.value.length });
+  }
+  return t('home.singleImage');
+});
+
 const onSingleImageUploaded = (dataUrl: string) => {
-  loadedFileName.value = 'Imagen individual';
   handleSingleImage(dataUrl);
   isReaderOpen.value = true;
 };
 
 const onChapterUploaded = (pages: string[]) => {
-  loadedFileName.value = `Capítulo de ${pages.length} páginas`;
   handleChapterLoaded(pages);
   isReaderOpen.value = true;
 };
